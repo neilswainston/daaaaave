@@ -1,0 +1,1 @@
+gene	mean	stdgA	10	10gB	1	1gC	19	19gD	2	2gE	8	8
