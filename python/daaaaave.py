@@ -49,10 +49,10 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, MaxGrowth=False)
     call_SuperDaaaaave.m available at http://github.com/u003f/transcript2flux
     29 May 2015
     """
-    
-    model = sbml.getModel()    
+
+    model = sbml.getModel()
     EPS = 2.**(-52.)
-    
+
 #     % fill in zero entries
 #     unmeasured = setdiff(model.genes, gene_names);
 #     gene_names = [gene_names; unmeasured];
@@ -81,14 +81,14 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, MaxGrowth=False)
     U = np.array(cobra['ub'])
     fMaxGrowth = np.array(cobra['c'])
     f = np.zeros(len(fMaxGrowth))
-    b = np.array(cobra['b'])    
+    b = np.array(cobra['b'])
     csense = 'E' * nS
     vartype = 'C' * nR
 
     # remove any pseudo-infinites
     L[L<-500] = -INF
     U[U>500] = INF
-    
+
     solution_full, solution_obj, statMaxGrowth = easy_lp(fMaxGrowth, S, b, L, U, one=True)
     solnMaxGrowth = np.zeros(nR)
     objMaxGrowth = 0.
@@ -96,12 +96,12 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, MaxGrowth=False)
         # use max growth if SuperDaaaaave does not converge
         solnMaxGrowth = solution_full
         objMaxGrowth = np.floor(solution_obj/EPS)*EPS # round down a touch
- 
+
     # create positive FBA problem
     S = sparse.vstack([
         sparse.hstack([S, sparse.lil_matrix((nS, 2*nR))]),
         sparse.hstack([sparse.eye(nR), -sparse.eye(nR), sparse.eye(nR)])
-        ])        
+        ])
     L = np.append(L,np.zeros(2*nR))
     U = np.append(U,INF*np.ones(2*nR))
     b = np.append(b, np.zeros(nR))
@@ -116,31 +116,31 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, MaxGrowth=False)
     U = np.append(U,INF*np.ones(2*nR))
     f = np.append(f, np.zeros(2*nR))
     vartype = vartype + 'B'*2*nR
-     
+
     # p <= M * kP -> -p + M*kP >= 0
     S = sparse.vstack([
         S,
         sparse.hstack([sparse.lil_matrix((nR, nR)), -sparse.eye(nR), sparse.lil_matrix((nR, nR)), M*sparse.eye(nR), sparse.lil_matrix((nR, nR))])
-        ])        
+        ])
     b = np.append(b, np.zeros(nR))
     csense = csense + 'G'*nR
-    
+
     # n <= M * kN -> -n + M*kN >= 0
     S = sparse.vstack([
         S,
         sparse.hstack([sparse.lil_matrix((nR, nR)), sparse.lil_matrix((nR, nR)), -sparse.eye(nR), sparse.lil_matrix((nR, nR)), M*sparse.eye(nR)])
-        ])        
+        ])
     b = np.append(b, np.zeros(nR))
     csense = csense + 'G'*nR
-    
+
     # kP + kN = 1
     S = sparse.vstack([
         S,
         sparse.hstack([sparse.lil_matrix((nR, nR)), sparse.lil_matrix((nR, nR)), sparse.lil_matrix((nR, nR)), sparse.eye(nR), sparse.eye(nR)])
-        ])        
+        ])
     b = np.append(b, np.ones(nR))
     csense = csense + 'E'*nR
-    
+
     # abs(v) variables
     S = sparse.hstack([S, sparse.lil_matrix((nS+4*nR, nR))])
     L = np.append(L,-INF*np.ones(nR))
@@ -150,7 +150,7 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, MaxGrowth=False)
     S = sparse.vstack([
         S,
         sparse.hstack([sparse.lil_matrix((nR, nR)), -sparse.eye(nR), -sparse.eye(nR), sparse.lil_matrix((nR, nR)), sparse.lil_matrix((nR, nR)), sparse.eye(nR)])
-        ])        
+        ])
     b = np.append(b, np.zeros(nR))
     csense = csense + 'E'*nR
     model_rxns = [reaction.getId() for reaction in model.getListOfReactions()]
@@ -159,13 +159,13 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, MaxGrowth=False)
     # add scaling parameter a
     scale_index = 6*nR
     nS_all, nR_all = S.shape
-    
+
     S = sparse.hstack([S, sparse.lil_matrix((nS_all, 1))])
     L = np.append(L, 0)
     U = np.append(U, INF)
     f = np.append(f, 0)
     vartype = vartype + 'C'
- 
+
     # v >= a L -> v - a L >= 0
     n = 0
     for i, x in enumerate(L[:nR]):
@@ -177,7 +177,7 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, MaxGrowth=False)
             n += 1
             L[i] = -INF
             S = sparse.vstack([S, row])
-    b = np.append(b, np.zeros(n))  
+    b = np.append(b, np.zeros(n))
     csense = csense + 'G'*n
 
     # v <= a U -> - v + a U >= 0
@@ -191,9 +191,9 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, MaxGrowth=False)
             n += 1
             U[i] = INF
             S = sparse.vstack([S, row])
-    b = np.append(b, np.zeros(n))  
+    b = np.append(b, np.zeros(n))
     csense = csense + 'G'*n
-    
+
     # add slack variables for genes
     nS_all, nR_all = S.shape
     nG = len(gene_names)
@@ -207,29 +207,29 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, MaxGrowth=False)
     S = sparse.vstack([
         S,
         sparse.hstack([sparse.lil_matrix((nG, nR_all)), sparse.eye(nG)])
-        ])        
+        ])
     b = np.append(b, gene_exp)
     csense = csense + 'E'*nG
     gene_index = dict(zip(gene_names, range(nS_all,nS_all+nG)))
- 
+
     # add gene associations
     gene_exp_sd = dict(zip(gene_names, gene_exp_sd))
-    
+
     rxn_index = {}
     rxn_std = {}
-    
+
     S = S.todok()
-    
+
     for ind_rxn in range(len(model_rxns)):
         association = model_grRules[ind_rxn].strip()
-        
+
         if association:
-            
+
             rxn_id = model_rxns[ind_rxn]
             nS_all, nR_all = S.shape
             rxn_row = nS_all
             rxn_col = nR_all
-            
+
             # add reaction
             S.resize((nS_all+1, nR_all+1))
             S[rxn_row, rxn_col] = -1
@@ -239,17 +239,17 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, MaxGrowth=False)
             vartype = vartype + 'C'
             b = np.append(b, 0)
             csense = csense + 'E'
-            
+
             rxn_index[rxn_id] = rxn_col
-            
+
             # convert to DNF (or of ands)
             association = to_dnf(association)
             list_of_ors = re.split(' or ', association)
 
             std_out = 0
-            
+
             for association_or in list_of_ors:
-            
+
                 # add complex
                 nS_all, nR_all = S.shape
                 complex_col = nR_all
@@ -259,21 +259,21 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, MaxGrowth=False)
                 U = np.append(U, INF)
                 f = np.append(f, 0)
                 vartype = vartype + 'C'
-                
+
                 if association_or[0] == '(':
-                    association_or = association_or[1:-1]                   
-                
+                    association_or = association_or[1:-1]
+
                 list_of_ands = re.split(' and ', association_or)
-            
+
                 std_in = INF
-                
+
                 for gene in list_of_ands:
 
                     nS_all, nR_all = S.shape
                     gene_col = nR_all
-                    ineq_row = nS_all                    
+                    ineq_row = nS_all
                     # complex > gene -> gene - complex > 0
-                    S.resize((nS_all+1, nR_all+1))                                        
+                    S.resize((nS_all+1, nR_all+1))
                     S[ineq_row, gene_col] = 1
                     S[ineq_row, complex_col] = -1
                     L = np.append(L, 0)
@@ -282,17 +282,17 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, MaxGrowth=False)
                     vartype = vartype + 'C'
                     b = np.append(b, 0)
                     csense = csense + 'G'
-                
+
                     index = gene_index[gene]
                     S[index, gene_col] = 1
-                
+
                     std = gene_exp_sd[gene]
                     std_in = min([std_in, std])
 
                 std_out = np.sqrt(std_out**2 + std_in**2)
 
             rxn_std[rxn_id] = std_out
-            
+
     if statMaxGrowth and MaxGrowth:
         # set max growth as constraint
         fMaxGrowthBig = np.zeros((1,len(f)))
@@ -301,15 +301,15 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, MaxGrowth=False)
         S = sparse.vstack([S, fMaxGrowthBig])
         b = np.append(b, 0)
         csense = csense + 'E'
-        
+
     v, obj, conv = easy_milp(f, S, b, L, U, csense, vartype)
-    
+
     # set objective as constraint
     obj = np.floor(obj/EPS)*EPS # round down a touch
     S = sparse.vstack([S, f])
     b = np.append(b, obj)
     csense = csense + 'E'
-    
+
     # minimise distance from data to flux
     f = np.zeros(len(f))
     S = S.todok()
@@ -332,7 +332,7 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, MaxGrowth=False)
             vartype = vartype + 'C'*2
             b = np.append(b,0)
             csense = csense + 'E'
-            
+
     soln, solution_obj, conv = easy_milp(f, S, b, L, U, csense, vartype)
 #     print 'MILP solution:\t%g\n' %solution_obj
 
@@ -341,7 +341,7 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, MaxGrowth=False)
         fluxes = [soln[i]/soln[scale_index] for i in range(nR)]
     else:
         fluxes = solnMaxGrowth
-        
+
     return fluxes
 
 
@@ -362,7 +362,7 @@ def to_dnf(association):
     if association[:3] == 'Or(':
         association = association[3:-1]
     # .. -> (A and B) or (A and C) or D
-    
+
     if association == 'False':
         association = ''
     return association
@@ -403,7 +403,7 @@ def results():
         'experimental_fluxes_example_2.txt',
         'rA', 'rA'
         )
-
+#
     start = time.clock()
     print_results(
         'yeast_5.21_MCISB.xml',
@@ -707,7 +707,7 @@ def parse_gene_data(genes_file):
 
 
 def get_list_of_genes(sbml):
-    
+
     gene_list = []
     model = sbml.getModel()
     for reaction in model.getListOfReactions():
@@ -717,7 +717,7 @@ def get_list_of_genes(sbml):
             )
         gene_assn = match.group(1)
         gene_list.append(gene_assn)
-    
+
     return gene_list
 
 
@@ -730,14 +730,14 @@ def genes_to_rxns(
     rxn_exp, rxn_exp_sd = [], []
     for i in xrange(len(gene_names)):
         gene_names[i] = gene_names[i].replace('-', '_')
-        
+
     list_of_genes = get_list_of_genes(sbml)
 
     for i in xrange(model.getNumReactions()):
         reaction = model.getReaction(i)
-        
+
         gene_assn = list_of_genes[i]
-        
+
         gene_assn = gene_assn.replace('-', '_')
         gene_assn = gene_assn.replace(' AND ', ' and ')
         gene_assn = gene_assn.replace(' OR ', ' or ')
@@ -985,7 +985,7 @@ def data_to_flux(sbml, rxn_exp, rxn_exp_sd, original_method=False):
 
 def easy_milp(f, a, b, vlb, vub, csense, vartype):
     '''Optimize MILP using friends of Gurobi.'''
-    
+
     # catch np arrays
     f, b, vlb, vub = list(f), list(b), list(vlb), list(vub)
 
@@ -994,10 +994,10 @@ def easy_milp(f, a, b, vlb, vub, csense, vartype):
     milp.Params.OutputFlag = 0
     milp.Params.FeasibilityTol = 1e-9  # as per Cobra
     milp.Params.OptimalityTol = 1e-9  # as per Cobra
-    
+
     milp.Params.timeLimit = 5*60  # max 5 mins / solve
 #     milp.Params.OutputFlag = 1  # display all
-    
+
     rows, cols = a.shape
     # add variables to model
     for j in xrange(cols):
@@ -1042,11 +1042,11 @@ def easy_milp(f, a, b, vlb, vub, csense, vartype):
     del milp
 
     return v, f_opt, conv
-    
+
 
 def easy_lp(f, a, b, vlb, vub, one=False):
     '''Optimize lp using friends of Gurobi.'''
-    
+
     # catch np arrays
     f, b, vlb, vub = list(f), list(b), list(vlb), list(vub)
 
