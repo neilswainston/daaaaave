@@ -448,7 +448,7 @@ def print_results(
         "rxn", "exp", "S'Dave", "Dave",
         "FBA", "fFBA", "Gimme")
     for i in xrange(len(rxn_names)):
-        print '%s\t%g\t%g\t%g\t%g\t%g\t%g' % (
+        print '%s\t%.3g\t%.3g\t%.3g\t%.3g\t%.3g\t%.3g' % (
             rxn_names[i], exp_flux[i], mod_SuperDaaaaave[i], mod_daaaaave[i],
             mod_fba[i], mod_fba_best[i], mod_gimme[i])
     print '%s\t%.3g\t%.3g\t%.3g\t%.3g\t%.3g\t%.3g\n' % (
