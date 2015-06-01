@@ -1,35 +1,45 @@
-Reaction	Example 1	Daaaaave	FBA	Fitted FBA	Gimme	Shlomi
+Example 1
+
+rxn	exp	S'Dave	Dave	FBA	fFBA	Gimme
 rA	10	10	10	10	10	10
 rB	10	10	10	10	10	10
 rC	10	10	10	10	10	10
-rD	2	2	0	0	1	0
-rE	8	8	10	10	9	10
-R2	1	1	0.833333	0.833333	0.958333	0.833333
+rD	2	2	2	0	0	1
+rE	8	8	8	10	10	9
+R2	1	1	1	0.833	0.833	0.958
 
-Reaction	Example 2	Daaaaave	FBA	Fitted FBA	Gimme	Shlomi
+Example 2
+
+rxn	exp	S'Dave	Dave	FBA	fFBA	Gimme
 rA	5	5	5	5	5	5
 rB	5	5	5	5	5	5
 rC	5	5	5	5	5	5
-rD	1	1	0	0	0.5	0
-rE	4	4	5	5	4.5	5
-R2	1	1	0.833333	0.833333	0.958333	0.833333
+rD	1	1	1	0	0	0.5
+rE	4	4	4	5	5	4.5
+R2	1	1	1	0.833	0.833	0.958
 
-Reaction	Experimental 75%	Daaaaave	FBA	Fitted FBA	Gimme	Shlomi
+75%
+
+rxn	exp	S'Dave	Dave	FBA	fFBA	Gimme
 D-glucose exchange	16.5	16.5	16.5	16.5	16.5	16.5
-ethanol exchange	23.8	25.694	0	0	0	0
-carbon dioxide exchange	22.7	31.51	37.5666	22.7	31.5114	0
+ethanol exchange	23.8	24.2709	25.694	0	0	0
+carbon dioxide exchange	22.7	29.2614	31.51	37.5666	22.7	31.5114
 glycerol exchange	3.54	0	0	0	0	0
-acetate exchange	0.311	0.0164027	0	0	0	0
-alpha,alpha-trehalose exchange	0.0356	0.0301473	0	0	0	0
-(R)-lactate exchange	0.00873	0.0300825	0	0	0	0
-R2	1	0.871003	-0.100038	0.203838	0.0970884	-0.504634
+acetate exchange	0.311	1.54244	0.0164027	0	0	0
+alpha,alpha-trehalose exchange	0.0356	0	0.0301473	0	0	0
+(R)-lactate exchange	0.00873	0.0233734	0.0300825	0	0	0
+R2	1	0.921	0.871	-0.1	0.204	0.0971
 
-Reaction	Experimental 85%	Daaaaave	FBA	Fitted FBA	Gimme	Shlomi
+85%
+
+rxn	exp	S'Dave	Dave	FBA	fFBA	Gimme
 D-glucose exchange	11	11	11	11	11	11
-ethanol exchange	13	16.2046	0	0	0	0
-carbon dioxide exchange	21	20.0591	25.0444	21	15.9564	32.3473
-glycerol exchange	2.17	0.126014	0	0	0	0
-acetate exchange	0.239	0.00910649	0	0	0	0
-alpha,alpha-trehalose exchange	0.0215	0.0220033	0	0	0	0
-(R)-lactate exchange	0.00609	0.0175731	0	0	0	0
-R2	1	0.962865	0.541102	0.580583	0.519184	0.269796
+ethanol exchange	13	17.4584	16.2046	0	0	0
+carbon dioxide exchange	21	20.046	20.0591	25.0444	21	15.9564
+glycerol exchange	2.17	0.0625351	0.126014	0	0	0
+acetate exchange	0.239	0.0072624	0.00910649	0	0	0
+alpha,alpha-trehalose exchange	0.0215	0	0.0220033	0	0	0
+(R)-lactate exchange	0.00609	0.0140145	0.0175731	0	0	0
+R2	1	0.939	0.963	0.541	0.581	0.519
+
+1726.78 seconds elapsed

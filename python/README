@@ -5,7 +5,12 @@ Swainston N (2012) "Improving metabolic flux predictions using absolute
 gene expression data" BMC Syst Biol 6:73
 http://dx.doi.org/10.1186/1752-0509-6-73
 
-The algorithm was originally implemented in MatLab, but is now also available 
+19-May-14:
+
+The algorithm was originally implemented in MatLab, but is now also available
 in python.
 
-Last updated: 19 May 14
+29-May-15:
+
+Implementation of all-improved SuperDaaaaave, translated from the Matlab function
+"call_SuperDaaaaave.m" available at http://github.com/u003f/transcript2flux
