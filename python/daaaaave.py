@@ -144,7 +144,7 @@ def call_ComparisonDaaaaave(sbml_in, gene_names, gene_exp, gene_exp_sd, exp_flux
 
     # replace characters in gene identifiers
     gene_names = [gene.replace('-', '_') for gene in gene_names]
-    model_grRules = get_list_of_genes(sbml)
+    model_grRules = get_list_of_gene_associations(sbml)
     model_grRules = [gene.replace('-', '_') for gene in model_grRules]
     model_rxns = [reaction.getId() for reaction in model.getListOfReactions()]
 
@@ -423,35 +423,21 @@ def FVA(sbml):
     return bounds
 
 
-def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, MaxGrowth=False):
+def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, MaxGrowth=False, UseSD=True, FixScaling=0):
 
     """
     Implementation of all-improved SuperDaaaaave, translated from the Matlab function
     call_SuperDaaaaave.m available at http://github.com/u003f/transcript2flux
     29 May 2015
+    MaxGrowth: [1/0] find solution that maximises growth
+    FixScaling: fixed rescaling between transcript and flux data
     """
 
     model = sbml.getModel()
 
-#     % fill in zero entries
-#     unmeasured = setdiff(model.genes, gene_names);
-#     gene_names = [gene_names; unmeasured];
-#     gene_exp = [gene_exp; zeros(length(unmeasured), 1)];
-#     if isempty(gene_exp_sd)
-#         gene_exp_sd = zeros(size(gene_exp));
-#         disp('warning: no gene expression std given')
-#     else
-#         gene_exp_sd = [gene_exp_sd; zeros(length(unmeasured), 1)];
-#     end
-#     gene_min = min(gene_exp_sd(gene_exp_sd>0));
-#     if isempty(gene_min)
-#         gene_min = min(gene_exp(gene_exp>0));
-#     end
-#     gene_exp_sd(gene_exp_sd == 0) = gene_min/2;
-
     # replace characters in gene identifiers
     gene_names = [gene.replace('-', '_') for gene in gene_names]
-    model_grRules = get_list_of_genes(sbml)
+    model_grRules = get_list_of_gene_associations(sbml)
     model_grRules = [gene.replace('-', '_') for gene in model_grRules]
 
     cobra = convert_sbml_to_cobra(sbml)
@@ -541,8 +527,13 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, MaxGrowth=False)
     nS_all, nR_all = S.shape
 
     S = sparse.hstack([S, sparse.lil_matrix((nS_all, 1))])
-    L = np.append(L, 0)
-    U = np.append(U, INF)
+    if FixScaling:
+        L = np.append(L, FixScaling)
+        U = np.append(U, FixScaling)
+    else:
+#         L = np.append(L, 0)
+        L = np.append(L, 1)  # transcript > flux; avoids a=0 issues
+        U = np.append(U, INF)
     f = np.append(f, 0)
     vartype = vartype + 'C'
 
@@ -652,7 +643,7 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, MaxGrowth=False)
                     nS_all, nR_all = S.shape
                     gene_col = nR_all
                     ineq_row = nS_all
-                    # complex > gene -> gene - complex > 0
+                    # complex < gene -> gene - complex > 0
                     S.resize((nS_all+1, nR_all+1))
                     S[ineq_row, gene_col] = 1
                     S[ineq_row, complex_col] = -1
@@ -688,7 +679,7 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, MaxGrowth=False)
     obj = np.floor(obj/EPS)*EPS # round down a touch
     S = sparse.vstack([S, f])
     b = np.append(b, obj)
-    csense = csense + 'E'
+    csense = csense + 'G'
 
     # minimise distance from data to flux
     f = np.zeros(len(f))
@@ -706,23 +697,39 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, MaxGrowth=False)
             S[rxn_ind, nR_all+1] = 1
             L = np.append(L,[0,0])
             U = np.append(U,[INF,INF])
-#             std = rxn_std[rxn_id]
-#             f = np.append(f, [-1/std, -1/std])
-            f = np.append(f, [-1, -1])
+            if UseSD:
+                std = rxn_std[rxn_id]
+            else:
+                std = 1.
+            f = np.append(f, [-1./std, -1./std])
             vartype = vartype + 'C'*2
             b = np.append(b,0)
             csense = csense + 'E'
 
-    soln, solution_obj, conv = easy_milp(f, S, b, L, U, csense, vartype)
-#     print 'MILP solution:\t%g\n' %solution_obj
+    soln, obj, conv = easy_milp(f, S, b, L, U, csense, vartype)
+
+#     if conv:
+#         # minimise total flux
+#         obj = np.floor(obj/EPS)*EPS # round down a touch
+#         S = sparse.vstack([S, f])
+#         b = np.append(b, obj)
+#         csense = csense + 'G'
+#         f = np.zeros(len(f))
+#         for index in abs_flux_index.values():
+#             f[index] = -1
+#         soln_min, solution_obj_min, conv_min = easy_milp(f, S, b, L, U, csense, vartype)
+#         if conv_min:
+#             soln, solution_obj, conv = soln_min, solution_obj_min, conv_min
 
     # rescale
-    if soln:
-        fluxes = [soln[i]/soln[scale_index] for i in range(nR)]
+    if conv:
+        scaling_factor = soln[scale_index]
+        fluxes = [soln[i]/scaling_factor for i in range(nR)]
     else:
+        scaling_factor = NAN
         fluxes = solnMaxGrowth
 
-    return fluxes
+    return fluxes, scaling_factor
 
 
 def to_dnf(association):
@@ -764,7 +771,7 @@ def SuperDaaaaave(model_file, genes_file, fluxes_file, flux_to_scale):
     sbml = read_sbml(os.path.join(PATH, model_file))
     rescale_SBML(sbml, exp_rxn_names, exp_flux, flux_to_scale)
 
-    flux = call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, MaxGrowth=False)
+    flux, scaling_factor = call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, MaxGrowth=False)
 
     return flux
 
@@ -777,13 +784,14 @@ def results():
         'genedata_example_1.txt', 'experimental_fluxes_example_1.txt',
         'rA', 'rA'
         )
+
     print_results(
         'example.xml',
         'genedata_example_2.txt',
         'experimental_fluxes_example_2.txt',
         'rA', 'rA'
         )
-#
+
     start = time.clock()
     print_results(
         'yeast_5.21_MCISB.xml',
@@ -1086,7 +1094,7 @@ def parse_gene_data(genes_file):
     return gene_names, gene_exp, gene_exp_sd
 
 
-def get_list_of_genes(sbml):
+def get_list_of_gene_associations(sbml):
 
     gene_list = []
     model = sbml.getModel()
@@ -1101,6 +1109,21 @@ def get_list_of_genes(sbml):
     return gene_list
 
 
+def get_list_of_genes(sbml):
+
+    gene_association_list = get_list_of_gene_associations(sbml)
+    gene_list = []
+
+    for gene_assn in gene_association_list:
+        if gene_assn:
+            gene_assn_list = re.findall(r'\b([\w]*)\b', gene_assn)
+            gene_list.extend(gene_assn_list)
+
+    gene_list = set_diff(gene_list, ['and', 'or', 'AND', 'OR', ''])
+
+    return gene_list
+
+
 def genes_to_rxns(
         sbml, gene_names, gene_exp, gene_exp_sd,
         original_method=False):
@@ -1111,7 +1134,7 @@ def genes_to_rxns(
     for i in xrange(len(gene_names)):
         gene_names[i] = gene_names[i].replace('-', '_')
 
-    list_of_genes = get_list_of_genes(sbml)
+    list_of_genes = get_list_of_gene_associations(sbml)
 
     for i in xrange(model.getNumReactions()):
         reaction = model.getReaction(i)
@@ -1372,11 +1395,11 @@ def easy_milp(f, a, b, vlb, vub, csense, vartype):
     # create gurobi model
     milp = gurobipy.Model()
     milp.Params.OutputFlag = 0
-    milp.Params.FeasibilityTol = 1e-9  # as per Cobra
-    milp.Params.OptimalityTol = 1e-9  # as per Cobra
+#     milp.Params.FeasibilityTol = 1e-9  # as per Cobra
+#     milp.Params.OptimalityTol = 1e-9  # as per Cobra
 
     milp.Params.timeLimit = 5*60  # max 5 mins / solve
-#     milp.Params.OutputFlag = 1  # display all
+    milp.Params.OutputFlag = 1  # display all
 
     rows, cols = a.shape
     # add variables to model
@@ -1405,8 +1428,8 @@ def easy_milp(f, a, b, vlb, vub, csense, vartype):
         elif csense[i] == 'L':
             csensei = gurobipy.GRB.LESS_EQUAL
         milp.addConstr(lhs=expr, sense=csensei, rhs=b[i])
-    milp.update()
     milp.ModelSense = -1
+    milp.update()
     milp.optimize()
 
     v = np.empty(len(f))
@@ -1456,8 +1479,8 @@ def easy_lp(f, a, b, vlb, vub, one=False):
         coeff = S.data[start:end]
         expr = gurobipy.LinExpr(coeff, variables)
         lp.addConstr(lhs=expr, sense=gurobipy.GRB.EQUAL, rhs=b[i])
-    lp.update()
     lp.ModelSense = -1
+    lp.update()
     lp.optimize()
 
     v = np.empty(len(f))
@@ -1672,6 +1695,6 @@ def fba_fitted(sbml, data, original_method=False):
 
 
 if __name__ == '__main__':
-#     results()
-    test_ComparisonDaaaaave()
+    results()
+#     test_ComparisonDaaaaave()
     print 'DONE!'
