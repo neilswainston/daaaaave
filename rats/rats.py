@@ -108,8 +108,14 @@ def fidarestat_to_flux():
     reaction = sbml.getModel().getReaction('R_EX_glc_LPAREN_e_RPAREN_')
     reaction.getKineticLaw().getParameter('LOWER_BOUND').setValue(0)
     reaction.getKineticLaw().getParameter('UPPER_BOUND').setValue(INF)
-    flux_D, scaling_factor_D = om.call_SuperDaaaaave(sbml, gene_names, gene_exp_D, gene_exp_sd_D, MaxGrowth=False, UseSD=USE_SD, FixScaling=scaling_factor_C)
-    flux_F, scaling_factor_F = om.call_SuperDaaaaave(sbml, gene_names, gene_exp_F, gene_exp_sd_F, MaxGrowth=False, UseSD=USE_SD, FixScaling=scaling_factor_C)
+    flux_D, scaling_factor_D = om.call_SuperDaaaaave(
+        sbml, gene_names, gene_exp_D, gene_exp_sd_D, MaxGrowth=False,
+        UseSD=USE_SD, FixScaling=scaling_factor_C, TargetFlux=flux_C
+        )
+    flux_F, scaling_factor_F = om.call_SuperDaaaaave(
+        sbml, gene_names, gene_exp_F, gene_exp_sd_F, MaxGrowth=False,
+        UseSD=USE_SD, FixScaling=scaling_factor_C, TargetFlux=flux_C
+        )
 
     # remove small fluxes
     flux_C, flux_D, flux_F = np.array(flux_C), np.array(flux_D), np.array(flux_F)

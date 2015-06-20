@@ -423,7 +423,7 @@ def FVA(sbml):
     return bounds
 
 
-def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, MaxGrowth=False, UseSD=True, FixScaling=0):
+def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, MaxGrowth=False, UseSD=True, FixScaling=0, TargetFlux=None):
 
     """
     Implementation of all-improved SuperDaaaaave, translated from the Matlab function
@@ -708,18 +708,41 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, MaxGrowth=False,
 
     soln, obj, conv = easy_milp(f, S, b, L, U, csense, vartype)
 
-#     if conv:
-#         # minimise total flux
-#         obj = np.floor(obj/EPS)*EPS # round down a touch
-#         S = sparse.vstack([S, f])
-#         b = np.append(b, obj)
-#         csense = csense + 'G'
-#         f = np.zeros(len(f))
-#         for index in abs_flux_index.values():
-#             f[index] = -1
-#         soln_min, solution_obj_min, conv_min = easy_milp(f, S, b, L, U, csense, vartype)
-#         if conv_min:
-#             soln, solution_obj, conv = soln_min, solution_obj_min, conv_min
+    if conv:
+        obj = np.floor(obj/EPS)*EPS # round down a touch
+        S = sparse.vstack([S, f])
+        b = np.append(b, obj)
+        csense = csense + 'G'
+        f = np.zeros(len(f))
+
+        # minimise distance to target flux
+        if not TargetFlux:
+            TargetFlux = np.zeros(nR)
+        TargetFlux = np.array(TargetFlux)
+
+        # v - TargetFlux = P - N -> v - P + N = TargetFlux
+        nS_all, nR_all = S.shape
+        S = sparse.vstack([
+            sparse.hstack([S, sparse.lil_matrix((nS_all, 2*nR))]),
+            sparse.hstack([sparse.eye(nR), sparse.lil_matrix((nR, nR_all - nR)), -sparse.eye(nR), sparse.eye(nR)])
+            ])
+        L = np.append(L,np.zeros(2*nR))
+        U = np.append(U,INF*np.ones(2*nR))
+        b = np.append(b,TargetFlux)
+        f = np.append(f, -np.ones(2*nR))
+        csense = csense + 'E'*nR
+        vartype = vartype + 'C'*2*nR
+
+        # start from feasible solution
+        p0 = soln[:nR] - TargetFlux
+        p0[p0<0] = 0.
+        n0 = -(soln[:nR] - TargetFlux)
+        n0[n0<0] = 0.
+        init = np.append(soln, np.append(p0, n0))
+
+        soln_min, solution_obj_min, conv_min = easy_milp(f, S, b, L, U, csense, vartype, ic=init)
+        if conv_min:
+            soln, solution_obj, conv = soln_min, solution_obj_min, conv_min
 
     # rescale
     if conv:
@@ -1386,7 +1409,7 @@ def data_to_flux(sbml, rxn_exp, rxn_exp_sd, original_method=False):
     return v_sol
 
 
-def easy_milp(f, a, b, vlb, vub, csense, vartype):
+def easy_milp(f, a, b, vlb, vub, csense, vartype, ic=None):
     '''Optimize MILP using friends of Gurobi.'''
 
     # catch np arrays
@@ -1399,7 +1422,7 @@ def easy_milp(f, a, b, vlb, vub, csense, vartype):
 #     milp.Params.OptimalityTol = 1e-9  # as per Cobra
 
     milp.Params.timeLimit = 5*60  # max 5 mins / solve
-    milp.Params.OutputFlag = 1  # display all
+#     milp.Params.OutputFlag = 1  # display all
 
     rows, cols = a.shape
     # add variables to model
@@ -1412,13 +1435,19 @@ def easy_milp(f, a, b, vlb, vub, csense, vartype):
             UB = gurobipy.GRB.INFINITY
         milp.addVar(lb=LB, ub=UB, obj=f[j], vtype=vartype[j])
     milp.update()
-    lpvars = milp.getVars()
+    if ic is not None:
+        milpvars = milp.getVars()
+        for j in xrange(cols):
+            var = milpvars[j]
+            var.setAttr('Start', ic[j])
+    milp.update()
+    milpvars = milp.getVars()
     # iterate over the rows of S adding each row into the model
     S = a.tocsr()
     for i in xrange(rows):
         start = S.indptr[i]
         end = S.indptr[i+1]
-        variables = [lpvars[j] for j in S.indices[start:end]]
+        variables = [milpvars[j] for j in S.indices[start:end]]
         coeff = S.data[start:end]
         expr = gurobipy.LinExpr(coeff, variables)
         if csense[i] == 'E':
