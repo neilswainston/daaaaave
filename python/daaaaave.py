@@ -42,6 +42,8 @@ INF = np.inf
 PATH = os.path.dirname(__file__)
 EPS = 2.**(-52.)
 
+LP_TOL = 1e-6
+
 
 def test_ComparisonDaaaaave():
 
@@ -164,14 +166,6 @@ def call_ComparisonDaaaaave(sbml_in, gene_names, gene_exp, gene_exp_sd, exp_flux
     L[L<-500] = -INF
     U[U>500] = INF
 
-#     solution_full, solution_obj, statMaxGrowth = easy_lp(fMaxGrowth, S, b, L, U, one=True)
-#     solnMaxGrowth = np.zeros(nR)
-#     objMaxGrowth = 0.
-#     if statMaxGrowth == 1.:
-#         # use max growth if SuperDaaaaave does not converge
-#         solnMaxGrowth = solution_full
-#         objMaxGrowth = np.floor(solution_obj/EPS)*EPS # round down a touch
-
     # add in experimental fluxes
     L1, L2 = L.copy(), L.copy()
     U1, U2 = U.copy(), U.copy()
@@ -195,9 +189,6 @@ def call_ComparisonDaaaaave(sbml_in, gene_names, gene_exp, gene_exp_sd, exp_flux
     f = np.append(f, f)
     csense = csense + csense
     vartype = vartype + vartype
-#     flux_index = {}
-#     for index in range(nR):
-#         flux_index[model_rxns[index]] = (index, index+nR)
 
     NS, NR = 2*nS, 2*nR
     # create positive FBA problem
@@ -455,13 +446,26 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, MaxGrowth=False,
     L[L<-500] = -INF
     U[U>500] = INF
 
+    # find a feasible solution
+    feas0, feas_obj, feas_stat = easy_lp(f, S, b, L, U, one=True)
+    if not feas_stat:
+        print 'error:\tmodel infeasible'
+    feas0 = np.array(feas0)
+    feas = feas0
+    if FixScaling:
+        feas = feas * FixScaling
+
     solution_full, solution_obj, statMaxGrowth = easy_lp(fMaxGrowth, S, b, L, U, one=True)
     solnMaxGrowth = np.zeros(nR)
     objMaxGrowth = 0.
     if statMaxGrowth == 1.:
         # use max growth if SuperDaaaaave does not converge
         solnMaxGrowth = solution_full
-        objMaxGrowth = np.floor(solution_obj/EPS)*EPS # round down a touch
+#         objMaxGrowth = np.floor(solution_obj/EPS)*EPS # round down a touch
+        if abs(solution_obj) < LP_TOL:
+            objMaxGrowth = 0.
+        else:
+            objMaxGrowth = solution_obj - LP_TOL # round down a touch
 
     # create positive FBA problem
     S = sparse.vstack([
@@ -474,6 +478,9 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, MaxGrowth=False,
     f = np.append(f, np.zeros(2*nR))
     csense = csense + 'E'*nR
     vartype = vartype + 'C'*2*nR
+    x = np.append(feas0, -feas0)
+    x[x<0] = 0
+    feas = np.append(feas,x)
 
     # only allow positive or negative flux
     M = 1e3 * max(abs( np.hstack([U[np.isfinite(U)], L[np.isfinite(L)], gene_exp]) ))
@@ -482,6 +489,8 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, MaxGrowth=False,
     U = np.append(U,INF*np.ones(2*nR))
     f = np.append(f, np.zeros(2*nR))
     vartype = vartype + 'B'*2*nR
+    x = np.append(feas0 >= 0, feas0 < 0)
+    feas = np.append(feas,x)
 
     # p <= M * kP -> -p + M*kP >= 0
     S = sparse.vstack([
@@ -521,6 +530,8 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, MaxGrowth=False,
     csense = csense + 'E'*nR
     model_rxns = [reaction.getId() for reaction in model.getListOfReactions()]
     abs_flux_index = dict(zip(model_rxns, range(5*nR,6*nR)))
+    x = abs(feas0)
+    feas = np.append(feas,x)
 
     # add scaling parameter a
     scale_index = 6*nR
@@ -530,10 +541,12 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, MaxGrowth=False,
     if FixScaling:
         L = np.append(L, FixScaling)
         U = np.append(U, FixScaling)
+        feas = np.append(feas, FixScaling)
     else:
 #         L = np.append(L, 0)
         L = np.append(L, 1)  # transcript > flux; avoids a=0 issues
         U = np.append(U, INF)
+        feas = np.append(feas, 1)
     f = np.append(f, 0)
     vartype = vartype + 'C'
 
@@ -573,6 +586,7 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, MaxGrowth=False,
     U = np.append(U, INF*np.ones(nG))
     f = np.append(f, np.zeros(nG))
     vartype = vartype + 'C'*nG
+    feas = np.append(feas, gene_exp)
 
     # add genes
     S = sparse.vstack([
@@ -593,7 +607,6 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, MaxGrowth=False,
 
     for ind_rxn in range(len(model_rxns)):
         association = model_grRules[ind_rxn].strip()
-
         if association:
 
             rxn_id = model_rxns[ind_rxn]
@@ -610,6 +623,7 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, MaxGrowth=False,
             vartype = vartype + 'C'
             b = np.append(b, 0)
             csense = csense + 'E'
+            feas = np.append(feas, 0)
 
             rxn_index[rxn_id] = rxn_col
 
@@ -630,6 +644,7 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, MaxGrowth=False,
                 U = np.append(U, INF)
                 f = np.append(f, 0)
                 vartype = vartype + 'C'
+                feas = np.append(feas, 0)
 
                 if association_or[0] == '(':
                     association_or = association_or[1:-1]
@@ -651,6 +666,7 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, MaxGrowth=False,
                     U = np.append(U, INF)
                     f = np.append(f, 0)
                     vartype = vartype + 'C'
+                    feas = np.append(feas, 0)
                     b = np.append(b, 0)
                     csense = csense + 'G'
 
@@ -673,10 +689,14 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, MaxGrowth=False,
         b = np.append(b, 0)
         csense = csense + 'E'
 
-    v, obj, conv = easy_milp(f, S, b, L, U, csense, vartype)
+    v, obj, conv = easy_milp(f, S, b, L, U, csense, vartype, ic=feas)
 
     # set objective as constraint
-    obj = np.floor(obj/EPS)*EPS # round down a touch
+#     obj = np.floor(obj/EPS)*EPS # round down a touch
+    if abs(obj) < LP_TOL:
+        obj = 0.
+    else:
+        obj = obj - LP_TOL # round down a touch
     S = sparse.vstack([S, f])
     b = np.append(b, obj)
     csense = csense + 'G'
@@ -709,7 +729,11 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, MaxGrowth=False,
     soln, obj, conv = easy_milp(f, S, b, L, U, csense, vartype)
 
     if conv:
-        obj = np.floor(obj/EPS)*EPS # round down a touch
+#         obj = np.floor(obj/EPS)*EPS # round down a touch
+        if abs(obj) < LP_TOL:
+            obj = 0.
+        else:
+            obj = obj - LP_TOL # round down a touch
         S = sparse.vstack([S, f])
         b = np.append(b, obj)
         csense = csense + 'G'
@@ -808,27 +832,27 @@ def results():
         'rA', 'rA'
         )
 
-    print_results(
-        'example.xml',
-        'genedata_example_2.txt',
-        'experimental_fluxes_example_2.txt',
-        'rA', 'rA'
-        )
-
-    start = time.clock()
-    print_results(
-        'yeast_5.21_MCISB.xml',
-        'genedata_75.txt', 'experimental_fluxes_75.txt',
-        'glucose transport', 'D-glucose exchange',
-        original_method=True
-        )
-    print_results(
-        'yeast_5.21_MCISB.xml',
-        'genedata_85.txt', 'experimental_fluxes_85.txt',
-        'glucose transport', 'D-glucose exchange',
-        original_method=True
-        )
-    print "%g seconds elapsed\n" % (time.clock() - start)
+#     print_results(
+#         'example.xml',
+#         'genedata_example_2.txt',
+#         'experimental_fluxes_example_2.txt',
+#         'rA', 'rA'
+#         )
+#
+#     start = time.clock()
+#     print_results(
+#         'yeast_5.21_MCISB.xml',
+#         'genedata_75.txt', 'experimental_fluxes_75.txt',
+#         'glucose transport', 'D-glucose exchange',
+#         original_method=True
+#         )
+#     print_results(
+#         'yeast_5.21_MCISB.xml',
+#         'genedata_85.txt', 'experimental_fluxes_85.txt',
+#         'glucose transport', 'D-glucose exchange',
+#         original_method=True
+#         )
+#     print "%g seconds elapsed\n" % (time.clock() - start)
 
 #     start = time.clock()
 #     print_results(
@@ -1415,14 +1439,36 @@ def easy_milp(f, a, b, vlb, vub, csense, vartype, ic=None):
     # catch np arrays
     f, b, vlb, vub = list(f), list(b), list(vlb), list(vub)
 
+    if ic is not None:
+        # check initial solution is feasible
+        nS, nR = a.shape
+        for index in range(nR):
+            dL, dU = vlb[index] - ic[index], ic[index] - vub[index]
+            if  dL > LP_TOL:
+                print 'LB %g violated [%g]' %(index, dL)
+            if dU > LP_TOL:
+                print 'UB %g violated [%g]' %(index, dU)
+        b0 = a * ic
+        for index in range(nS):
+            if csense[index] == 'E':
+                d = abs(b0[index] - b[index])
+            elif csense[index] == 'G':
+                d = b[index] - b0[index]
+            elif csense[index] == 'L':
+                d = b0[index] - b[index]
+            if d > LP_TOL:
+                print 'constraint %g (%s) violated [%g]' %(index, csense[index], d)
+
     # create gurobi model
     milp = gurobipy.Model()
-    milp.Params.OutputFlag = 0
-#     milp.Params.FeasibilityTol = 1e-9  # as per Cobra
-#     milp.Params.OptimalityTol = 1e-9  # as per Cobra
+    milp.Params.OutputFlag = 1
+    milp.Params.FeasibilityTol = LP_TOL
+    milp.Params.IntFeasTol = LP_TOL
+    milp.Params.MIPGapAbs = LP_TOL
 
-    milp.Params.timeLimit = 5*60  # max 5 mins / solve
-#     milp.Params.OutputFlag = 1  # display all
+    milp.Params.MIPGap = 1e-3  # call time at 0.1%
+
+#     milp.Params.timeLimit = 60.*60
 
     rows, cols = a.shape
     # add variables to model
