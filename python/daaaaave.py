@@ -22,7 +22,6 @@ http://github.com/u003f/transcript2flux
 # pylint --generate-rcfile
 # http://legacy.python.org/dev/peps/pep-0008/
 
-# pylint: disable=broad-except
 # pylint: disable=chained-comparison
 # pylint: disable=consider-using-enumerate
 # pylint: disable=invalid-name
@@ -34,7 +33,6 @@ http://github.com/u003f/transcript2flux
 # pylint: disable=too-many-nested-blocks
 # pylint: disable=too-many-statements
 # pylint: disable=wrong-import-order
-import csv
 import os
 import re
 
@@ -43,14 +41,11 @@ from sklearn.metrics import r2_score
 from sympy.logic import boolalg
 
 import numpy as np
+from python.data import load_flux_data, load_gene_data, genes_to_rxns
 from python.model import convert_sbml_to_cobra, get_gene_associations, \
     read_sbml
-from python.utils import set_diff
 import scipy.sparse as sparse
 
-
-# http://www.gurobi.com/documentation/6.0/quickstart_mac/py_python_interface.html
-# http://frank-fbergmann.blogspot.co.uk/2014/05/libsbml-python-bindings-5101.html
 PATH = os.path.join(os.path.dirname(__file__), 'data')
 EPS = 2.**(-52.)
 
@@ -65,13 +60,13 @@ def test_ComparisonDaaaaave():
     # create some relative daaaaata
     gene_names, gene_exp, gene_exp_sd = [], [], []
     # 75%: condition 1
-    gene_names_75, gene_exp_75, gene_exp_sd_75 = parse_gene_data(
-        os.path.join(PATH, 'genedata_75.txt')
-    )
+    gene_names_75, gene_exp_75, gene_exp_sd_75 = load_gene_data(
+        os.path.join(PATH, 'genedata_75.txt'))
+
     # 8%: condition 2
-    gene_names_85, gene_exp_85, gene_exp_sd_85 = parse_gene_data(
-        os.path.join(PATH, 'genedata_85.txt')
-    )
+    gene_names_85, gene_exp_85, gene_exp_sd_85 = load_gene_data(
+        os.path.join(PATH, 'genedata_85.txt'))
+
 #     # remove zero entries
 #     for gene in [gene_exp_75, gene_exp_sd_75, gene_exp_85, gene_exp_sd_85]:
 #         gene[gene == 0] = min(gene[gene != 0])/2
@@ -381,8 +376,6 @@ def call_ComparisonDaaaaave(sbml_in, gene_names, gene_exp, _, exp_flux):
 
 
 def FVA(sbml):
-
-    # model = sbml.getModel()
 
     cobra = convert_sbml_to_cobra(sbml)
     a = cobra['S']
@@ -1252,9 +1245,9 @@ def SuperDaaaaave(model_file, genes_file, fluxes_file, flux_to_scale):
     # sbml = read_sbml(os.path.join(PATH, model_file))
 
     # gene data
-    gene_names, gene_exp, gene_exp_sd = parse_gene_data(
-        os.path.join(PATH, genes_file)
-    )
+    gene_names, gene_exp, gene_exp_sd = load_gene_data(
+        os.path.join(PATH, genes_file))
+
     # flux data
     exp_flux, exp_rxn_names = load_flux_data(os.path.join(PATH, fluxes_file))
 
@@ -1271,11 +1264,10 @@ def SuperDaaaaave(model_file, genes_file, fluxes_file, flux_to_scale):
 def results():
     """Print tables 1 and 2 of Daaaaave et al."""
 
-    print_results(
-        'example.xml',
-        'genedata_example_1.txt', 'experimental_fluxes_example_1.txt',
-        'rA', 'rA'
-    )
+    # print_results(
+    #    'example.xml',
+    #    'genedata_example_1.txt', 'experimental_fluxes_example_1.txt',
+    #    'rA', 'rA')
 
 #     print_results(
 #         'example.xml',
@@ -1285,12 +1277,12 @@ def results():
 #         )
 #
 #     start = time.clock()
-#     print_results(
-#         'yeast_5.21_MCISB.xml',
-#         'genedata_75.txt', 'experimental_fluxes_75.txt',
-#         'glucose transport', 'D-glucose exchange',
-#         original_method=True
-#         )
+
+    print_results(
+        'yeast_5.21_MCISB.xml',
+        'genedata_75.txt', 'experimental_fluxes_75.txt',
+        'glucose transport', 'D-glucose exchange')
+
 #     print_results(
 #         'yeast_5.21_MCISB.xml',
 #         'genedata_85.txt', 'experimental_fluxes_85.txt',
@@ -1439,17 +1431,18 @@ def analysis(
         model_file, genes_file, fluxes_file, gene_to_scale, flux_to_scale):
     """Run all analyses on input files."""
 
-    # SuperDaaaaave!
-    v_SuperDaaaaave = SuperDaaaaave(
-        model_file, genes_file, fluxes_file, flux_to_scale)
-
     # MODEL
     sbml = read_sbml(os.path.join(PATH, model_file))
 
+    # SuperDaaaaave!
+    v_SuperDaaaaave = SuperDaaaaave(
+        model_file, genes_file, fluxes_file, flux_to_scale)
+    # v_SuperDaaaaave = [0] * sbml.getModel().getNumReactions()
+
     # gene data
-    gene_names, gene_exp, gene_exp_sd = parse_gene_data(
-        os.path.join(PATH, genes_file)
-    )
+    gene_names, gene_exp, gene_exp_sd = load_gene_data(
+        os.path.join(PATH, genes_file))
+
     # flux data
     exp_flux, exp_rxn_names = load_flux_data(os.path.join(PATH, fluxes_file))
 
@@ -1500,17 +1493,6 @@ def rescale_model(sbml, rxn_exp, rxn_exp_sd, gene_to_scale):
     return sbml, rxn_exp, rxn_exp_sd
 
 
-def load_flux_data(fluxes_file):
-
-    rxn_names, exp_flux = [], []
-    with open(fluxes_file, 'r') as csvfile:
-        reader = csv.reader(csvfile, delimiter='\t')
-        for row in reader:
-            rxn_names.append(row[0])
-            exp_flux.append(float(row[1]))
-    return exp_flux, rxn_names
-
-
 def create_data_array(sbml, exp_flux, exp_rxn_names, gene_to_scale):
 
     exp_rxn_names.append(gene_to_scale)
@@ -1559,134 +1541,6 @@ def format_results(
     mod_fba_best[abs(mod_fba_best) < 1e-6] = 0
 
     return mod_SuperDaaaaave, mod_daaaaave, mod_fba, mod_gimme, mod_fba_best
-
-
-def parse_gene_data(genes_file):
-    """Translate gene expression data file to arrays."""
-    gene_names, gene_exp, gene_exp_sd = [], [], []
-    with open(genes_file, 'r') as csvfile:
-        reader = csv.DictReader(csvfile, delimiter='\t')
-        for row in reader:
-            gene_names.append(row["gene"])
-            gene_exp.append(float(row["mean"]))
-            gene_exp_sd.append(float(row["std"]))
-    gene_exp, gene_exp_sd = np.array(gene_exp), np.array(gene_exp_sd)
-    return gene_names, gene_exp, gene_exp_sd
-
-
-def genes_to_rxns(
-        sbml, gene_names, gene_exp, gene_exp_sd):
-    """Match gene-level data to reaction-level data."""
-
-    model = sbml.getModel()
-    rxn_exp, rxn_exp_sd = [], []
-    for i in range(len(gene_names)):
-        gene_names[i] = gene_names[i].replace('-', '_')
-
-    list_of_genes = get_gene_associations(sbml)
-
-    for i in range(model.getNumReactions()):
-        # reaction = model.getReaction(i)
-
-        gene_assn = list_of_genes[i]
-
-        gene_assn = gene_assn.replace('-', '_')
-        gene_assn = gene_assn.replace(' AND ', ' and ')
-        gene_assn = gene_assn.replace(' OR ', ' or ')
-        gene_assn = gene_assn.replace(' )', ')')
-        gene_assn = gene_assn.replace('( ', '(')
-        gene_list = re.findall(r'\b([\w]*)\b', gene_assn)
-        gene_list = set_diff(gene_list, ['and', 'or', ''])
-        for gene in gene_list:
-            j = gene_names.index(gene)
-            ng, ng_sd = gene_exp[j], gene_exp_sd[j]
-            str_ng, str_ng_sd = repr(ng), repr(ng_sd)
-            gene_assn = re.sub(
-                r'\b' + gene + r'\b', str_ng + '~' + str_ng_sd, gene_assn
-            )
-        nr, nr_sd = map_gene_data(gene_assn)
-        rxn_exp.append(nr)
-        rxn_exp_sd.append(nr_sd)
-
-    rxn_exp, rxn_exp_sd = np.array(rxn_exp), np.array(rxn_exp_sd)
-    # sds 0 -> small
-    rxn_exp_sd[rxn_exp_sd == 0] = min(rxn_exp_sd[rxn_exp_sd != 0]) / 2
-    return rxn_exp, rxn_exp_sd
-
-
-def map_gene_data(gene_assn):
-    """Map string '(x1~x1SD) and (x2~x2SD) or (x3~x3SD)' to string y~ySD."""
-    nr, nr_sd = np.nan, np.nan
-    a_pm_b = r'[0-9\.]+~[0-9\.]+'
-    if gene_assn:
-        while np.isnan(nr):
-            try:
-                match_expr = r'\A([0-9\.]+)~([0-9\.]+)\Z'
-                match = re.search(match_expr, gene_assn)
-                str_nr, str_nr_sd = match.group(1), match.group(2)
-                nr, nr_sd = float(str_nr), float(str_nr_sd)
-            except Exception:
-                # replace brackets
-                match_expr = r'\((' + a_pm_b + r')\)'
-                for match in re.findall(match_expr, gene_assn):
-                    gene_assn = re.sub(r'\(' + match + r'\)', match, gene_assn)
-                # replace ANDs
-                match_expr = '(' + a_pm_b + ') and (' + a_pm_b + ')'
-                for ind, match in enumerate(re.findall(match_expr, gene_assn)):
-                    if ind == 0:
-                        lhs = match[0]
-                        rhs = match[1]
-                        replace_expr = a_and_b(lhs, rhs)
-                        gene_assn = re.sub(
-                            r'\b' + lhs + ' and ' + rhs + r'\b',
-                            replace_expr, gene_assn
-                        )
-                # replace ORs
-                match_expr = r'(' + a_pm_b + r') or (' + a_pm_b + r')'
-                match = re.search(match_expr, gene_assn)
-                for ind, match in enumerate(re.findall(match_expr, gene_assn)):
-                    if ind == 0:
-                        lhs = match[0]
-                        rhs = match[1]
-                        replace_expr = a_or_b(lhs, rhs)
-                        gene_assn = re.sub(
-                            r'\b' + lhs + ' or ' + rhs + r'\b',
-                            replace_expr, gene_assn
-                        )
-    return nr, nr_sd
-
-
-def a_and_b(str1, str2):
-
-    a_pm_b = r'\A([0-9\.]+)~([0-9\.]+)'
-    match_expr = a_pm_b
-    match1 = re.search(match_expr, str1)
-    ng1 = float(match1.group(1))
-    ng1_sd = float(match1.group(2))
-    match2 = re.search(match_expr, str2)
-    ng2 = float(match2.group(1))
-    ng2_sd = float(match2.group(2))
-    ng12, ng12_sd = [ng1, ng2], [ng1_sd, ng2_sd]
-    j = np.argmin(ng12)
-    ng, ng_sd = ng12[j], ng12_sd[j]
-    str_ng, str_ng_sd = repr(ng), repr(ng_sd)
-    return str_ng + '~' + str_ng_sd
-
-
-def a_or_b(str1, str2):
-
-    a_pm_b = r'\A([0-9\.]+)~([0-9\.]+)'
-    match_expr = a_pm_b
-    match1 = re.search(match_expr, str1)
-    ng1 = float(match1.group(1))
-    ng1_sd = float(match1.group(2))
-    match2 = re.search(match_expr, str2)
-    ng2 = float(match2.group(1))
-    ng2_sd = float(match2.group(2))
-    ng = ng1 + ng2
-    ng_sd = np.sqrt(ng1_sd**2. + ng2_sd**2.)
-    str_ng, str_ng_sd = repr(ng), repr(ng_sd)
-    return str_ng + '~' + str_ng_sd
 
 
 def data_to_flux(sbml, rxn_exp, rxn_exp_sd):
