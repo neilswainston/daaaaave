@@ -6,8 +6,11 @@ All rights reserved.
 @author: neilswainston
 '''
 # pylint: disable=invalid-name
+import re
+
 import libsbml
 from scipy.sparse import lil_matrix
+
 import numpy as np
 
 
@@ -51,6 +54,21 @@ def convert_sbml_to_cobra(sbml):
             'c': np.array(c),
             'b': np.array(b),
             'rev': np.array(rev)}
+
+
+def get_gene_associations(sbml):
+    '''Get gene associations.'''
+    gene_assoc = []
+
+    model = sbml.getModel()
+
+    for reaction in model.getListOfReactions():
+        match = re.search(r'<p>GENE_ASSOCIATION:([^<]*)</p>',
+                          reaction.getNotesString())
+
+        gene_assoc.append(match.group(1))
+
+    return gene_assoc
 
 
 def _update_s_matrix(model, reaction, S, j, spec_ids):
