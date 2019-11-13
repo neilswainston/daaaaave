@@ -51,7 +51,7 @@ import scipy.sparse as sparse
 
 # http://www.gurobi.com/documentation/6.0/quickstart_mac/py_python_interface.html
 # http://frank-fbergmann.blogspot.co.uk/2014/05/libsbml-python-bindings-5101.html
-PATH = os.path.dirname(__file__)
+PATH = os.path.join(os.path.dirname(__file__), 'data')
 EPS = 2.**(-52.)
 
 LP_TOL = 1e-6
@@ -2040,12 +2040,6 @@ def gimme(
     v_sol = solution[:model.getNumReactions()]
 
     return v_sol
-
-
-def shlomi(sbml):
-    """[Shlomi method is not implemented.]"""
-    model = sbml.getModel()
-    return np.zeros(model.getNumReactions())
 
 
 def fba_fitted(sbml, data):
