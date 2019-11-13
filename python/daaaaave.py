@@ -25,7 +25,7 @@ http://github.com/u003f/transcript2flux
 # pylint --generate-rcfile
 # http://legacy.python.org/dev/peps/pep-0008/
 
-# pylint: disable=bare-except
+# pylint: disable=broad-except
 # pylint: disable=chained-comparison
 # pylint: disable=consider-using-enumerate
 # pylint: disable=invalid-name
@@ -1354,8 +1354,7 @@ def OriginalDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, gene_to_scale,
 
     # gene data -> reaction data
     rxn_exp, rxn_exp_sd = genes_to_rxns(
-        sbml, gene_names, gene_exp, gene_exp_sd, original_method
-    )
+        sbml, gene_names, gene_exp, gene_exp_sd)
     # rescale model so rxn_exp and flux = 1 for reaction gene_to_scale
     sbml, rxn_exp, rxn_exp_sd = rescale_model(
         sbml, rxn_exp, rxn_exp_sd, gene_to_scale
@@ -1380,8 +1379,8 @@ def GimmeGimmeGimme(sbml, gene_names, gene_exp, gene_exp_sd, gene_to_scale,
 
     # gene data -> reaction data
     rxn_exp, rxn_exp_sd = genes_to_rxns(
-        sbml, gene_names, gene_exp, gene_exp_sd, original_method
-    )
+        sbml, gene_names, gene_exp, gene_exp_sd)
+
     # rescale model so rxn_exp and flux = 1 for reaction gene_to_scale
     sbml, rxn_exp, rxn_exp_sd = rescale_model(
         sbml, rxn_exp, rxn_exp_sd, gene_to_scale
@@ -1630,8 +1629,7 @@ def get_list_of_genes(sbml):
 
 
 def genes_to_rxns(
-        sbml, gene_names, gene_exp, gene_exp_sd,
-        original_method=False):
+        sbml, gene_names, gene_exp, gene_exp_sd):
     """Match gene-level data to reaction-level data."""
 
     model = sbml.getModel()
@@ -1656,16 +1654,11 @@ def genes_to_rxns(
         for gene in gene_list:
             j = gene_names.index(gene)
             ng, ng_sd = gene_exp[j], gene_exp_sd[j]
-            if original_method:
-                # use Matlab number to string converter
-                str_ng, str_ng_sd = num2str(ng), num2str(ng_sd)
-            else:
-                # use high-precision python number to string converter
-                str_ng, str_ng_sd = repr(ng), repr(ng_sd)
+            str_ng, str_ng_sd = repr(ng), repr(ng_sd)
             gene_assn = re.sub(
                 r'\b' + gene + r'\b', str_ng + '~' + str_ng_sd, gene_assn
             )
-        nr, nr_sd = map_gene_data(gene_assn, original_method)
+        nr, nr_sd = map_gene_data(gene_assn)
         rxn_exp.append(nr)
         rxn_exp_sd.append(nr_sd)
 
@@ -1675,29 +1668,12 @@ def genes_to_rxns(
     return rxn_exp, rxn_exp_sd
 
 
-def num2str(x):
-    """Implementation of Matlab num2str number to string converter."""
-    max_field_width = 12
-    float_width_offset = 4
-    float_field_extra = 7
-    xmax = float(abs(x))
-    if xmax == 0:
-        d = 1
-    else:
-        d = min(max_field_width, max(1, np.floor(np.log10(xmax)) + 1)) + \
-            float_width_offset
-    f = '%%%.0f.%.0fg' % (d + float_field_extra, d)
-    s = f % x
-    s = s.strip()
-    return s
-
-
 def set_diff(a, b):
     """Return the set difference of the two arrays."""
     return list(set(a).difference(set(b)))
 
 
-def map_gene_data(gene_assn, original_method=False):
+def map_gene_data(gene_assn):
     """Map string '(x1~x1SD) and (x2~x2SD) or (x3~x3SD)' to string y~ySD."""
     nr, nr_sd = NAN, NAN
     a_pm_b = r'[0-9\.]+~[0-9\.]+'
@@ -1719,7 +1695,7 @@ def map_gene_data(gene_assn, original_method=False):
                     if ind == 0:
                         lhs = match[0]
                         rhs = match[1]
-                        replace_expr = a_and_b(lhs, rhs, original_method)
+                        replace_expr = a_and_b(lhs, rhs)
                         gene_assn = re.sub(
                             r'\b' + lhs + ' and ' + rhs + r'\b',
                             replace_expr, gene_assn
@@ -1731,7 +1707,7 @@ def map_gene_data(gene_assn, original_method=False):
                     if ind == 0:
                         lhs = match[0]
                         rhs = match[1]
-                        replace_expr = a_or_b(lhs, rhs, original_method)
+                        replace_expr = a_or_b(lhs, rhs)
                         gene_assn = re.sub(
                             r'\b' + lhs + ' or ' + rhs + r'\b',
                             replace_expr, gene_assn
@@ -1739,7 +1715,7 @@ def map_gene_data(gene_assn, original_method=False):
     return nr, nr_sd
 
 
-def a_and_b(str1, str2, original_method=False):
+def a_and_b(str1, str2):
 
     a_pm_b = r'\A([0-9\.]+)~([0-9\.]+)'
     match_expr = a_pm_b
@@ -1752,14 +1728,11 @@ def a_and_b(str1, str2, original_method=False):
     ng12, ng12_sd = [ng1, ng2], [ng1_sd, ng2_sd]
     j = np.argmin(ng12)
     ng, ng_sd = ng12[j], ng12_sd[j]
-    if original_method:
-        str_ng, str_ng_sd = num2str(ng), num2str(ng_sd)
-    else:
-        str_ng, str_ng_sd = repr(ng), repr(ng_sd)
+    str_ng, str_ng_sd = repr(ng), repr(ng_sd)
     return str_ng + '~' + str_ng_sd
 
 
-def a_or_b(str1, str2, original_method=False):
+def a_or_b(str1, str2):
 
     a_pm_b = r'\A([0-9\.]+)~([0-9\.]+)'
     match_expr = a_pm_b
@@ -1771,10 +1744,7 @@ def a_or_b(str1, str2, original_method=False):
     ng2_sd = float(match2.group(2))
     ng = ng1 + ng2
     ng_sd = np.sqrt(ng1_sd**2. + ng2_sd**2.)
-    if original_method:
-        str_ng, str_ng_sd = num2str(ng), num2str(ng_sd)
-    else:
-        str_ng, str_ng_sd = repr(ng), repr(ng_sd)
+    str_ng, str_ng_sd = repr(ng), repr(ng_sd)
     return str_ng + '~' + str_ng_sd
 
 
