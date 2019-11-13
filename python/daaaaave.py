@@ -12,6 +12,9 @@ results() will reproduce Tables 1 and 2 of that paper, which compares
 Daaaaave with alternatives FBA, Gimme and Shlomi, and with experimental
 measurements.
 
+Flagging original_method to True will use a warts-and-all implementation
+to ensure identical results to the original Matlab algorithm.
+
 29-May-15:
 
 Implementation of all-improved SuperDaaaaave, translated from the Matlab
@@ -22,6 +25,7 @@ http://github.com/u003f/transcript2flux
 # pylint --generate-rcfile
 # http://legacy.python.org/dev/peps/pep-0008/
 
+# pylint: disable=broad-except
 # pylint: disable=chained-comparison
 # pylint: disable=consider-using-enumerate
 # pylint: disable=invalid-name
@@ -33,19 +37,21 @@ http://github.com/u003f/transcript2flux
 # pylint: disable=too-many-nested-blocks
 # pylint: disable=too-many-statements
 # pylint: disable=wrong-import-order
+import csv
 import os
 import re
 
 import gurobipy
+import libsbml
 from sklearn.metrics import r2_score
 from sympy.logic import boolalg
 
 import numpy as np
-from python.data import load_flux_data, load_gene_data, genes_to_rxns
-from python.model import convert_sbml_to_cobra, get_gene_associations, \
-    read_sbml
 import scipy.sparse as sparse
 
+
+# http://www.gurobi.com/documentation/6.0/quickstart_mac/py_python_interface.html
+# http://frank-fbergmann.blogspot.co.uk/2014/05/libsbml-python-bindings-5101.html
 PATH = os.path.join(os.path.dirname(__file__), 'data')
 EPS = 2.**(-52.)
 
@@ -60,13 +66,13 @@ def test_ComparisonDaaaaave():
     # create some relative daaaaata
     gene_names, gene_exp, gene_exp_sd = [], [], []
     # 75%: condition 1
-    gene_names_75, gene_exp_75, gene_exp_sd_75 = load_gene_data(
-        os.path.join(PATH, 'genedata_75.txt'))
-
+    gene_names_75, gene_exp_75, gene_exp_sd_75 = parse_gene_data(
+        os.path.join(PATH, 'genedata_75.txt')
+    )
     # 8%: condition 2
-    gene_names_85, gene_exp_85, gene_exp_sd_85 = load_gene_data(
-        os.path.join(PATH, 'genedata_85.txt'))
-
+    gene_names_85, gene_exp_85, gene_exp_sd_85 = parse_gene_data(
+        os.path.join(PATH, 'genedata_85.txt')
+    )
 #     # remove zero entries
 #     for gene in [gene_exp_75, gene_exp_sd_75, gene_exp_85, gene_exp_sd_85]:
 #         gene[gene == 0] = min(gene[gene != 0])/2
@@ -157,7 +163,7 @@ def call_ComparisonDaaaaave(sbml_in, gene_names, gene_exp, _, exp_flux):
 
     # replace characters in gene identifiers
     gene_names = [gene.replace('-', '_') for gene in gene_names]
-    model_grRules = get_gene_associations(sbml)
+    model_grRules = get_list_of_gene_associations(sbml)
     model_grRules = [gene.replace('-', '_') for gene in model_grRules]
     model_rxns = [reaction.getId() for reaction in model.getListOfReactions()]
 
@@ -377,6 +383,8 @@ def call_ComparisonDaaaaave(sbml_in, gene_names, gene_exp, _, exp_flux):
 
 def FVA(sbml):
 
+    # model = sbml.getModel()
+
     cobra = convert_sbml_to_cobra(sbml)
     a = cobra['S']
     rows, cols = a.shape
@@ -457,7 +465,7 @@ def call_SuperDaaaaave_SOS(sbml, gene_names, gene_exp, gene_exp_sd,
 
     # replace characters in gene identifiers
     gene_names = [gene.replace('-', '_') for gene in gene_names]
-    model_grRules = get_gene_associations(sbml)
+    model_grRules = get_list_of_gene_associations(sbml)
     model_grRules = [gene.replace('-', '_') for gene in model_grRules]
 
     cobra = convert_sbml_to_cobra(sbml)
@@ -822,7 +830,7 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd,
 #
     # replace characters in gene identifiers
     gene_names = [gene.replace('-', '_') for gene in gene_names]
-    model_grRules = get_gene_associations(sbml)
+    model_grRules = get_list_of_gene_associations(sbml)
     model_grRules = [gene.replace('-', '_') for gene in model_grRules]
 #
     cobra = convert_sbml_to_cobra(sbml)
@@ -1245,9 +1253,9 @@ def SuperDaaaaave(model_file, genes_file, fluxes_file, flux_to_scale):
     # sbml = read_sbml(os.path.join(PATH, model_file))
 
     # gene data
-    gene_names, gene_exp, gene_exp_sd = load_gene_data(
-        os.path.join(PATH, genes_file))
-
+    gene_names, gene_exp, gene_exp_sd = parse_gene_data(
+        os.path.join(PATH, genes_file)
+    )
     # flux data
     exp_flux, exp_rxn_names = load_flux_data(os.path.join(PATH, fluxes_file))
 
@@ -1264,10 +1272,11 @@ def SuperDaaaaave(model_file, genes_file, fluxes_file, flux_to_scale):
 def results():
     """Print tables 1 and 2 of Daaaaave et al."""
 
-    # print_results(
-    #    'example.xml',
-    #    'genedata_example_1.txt', 'experimental_fluxes_example_1.txt',
-    #    'rA', 'rA')
+    print_results(
+        'example.xml',
+        'genedata_example_1.txt', 'experimental_fluxes_example_1.txt',
+        'rA', 'rA'
+    )
 
 #     print_results(
 #         'example.xml',
@@ -1277,12 +1286,12 @@ def results():
 #         )
 #
 #     start = time.clock()
-
     print_results(
         'yeast_5.21_MCISB.xml',
         'genedata_75.txt', 'experimental_fluxes_75.txt',
-        'glucose transport', 'D-glucose exchange')
-
+        'glucose transport', 'D-glucose exchange',
+        original_method=True
+    )
 #     print_results(
 #         'yeast_5.21_MCISB.xml',
 #         'genedata_85.txt', 'experimental_fluxes_85.txt',
@@ -1309,13 +1318,13 @@ def results():
 
 def print_results(
         model_file, genes_file, fluxes_file,
-        gene_to_scale, flux_to_scale):
+        gene_to_scale, flux_to_scale, original_method=False):
     """Format output as per Daaaaave et al."""
 
     (rxn_names, exp_flux, mod_SuperDaaaaave, mod_daaaaave,
      mod_fba, mod_fba_best, mod_gimme) = analysis(
          model_file, genes_file, fluxes_file,
-         gene_to_scale, flux_to_scale)
+         gene_to_scale, flux_to_scale, original_method)
     print('%s\t%s\t%s\t%s\t%s\t%s\t%s' % (
         "rxn", "exp", "S'Dave", "Dave",
         "FBA", "fFBA", "Gimme"))
@@ -1334,7 +1343,8 @@ def print_results(
 
 
 def OriginalDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, gene_to_scale,
-                     exp_rxn_names, exp_flux, flux_to_scale):
+                     exp_rxn_names, exp_flux, flux_to_scale,
+                     original_method=False):
 
     # gene data -> reaction data
     rxn_exp, rxn_exp_sd = genes_to_rxns(
@@ -1345,7 +1355,7 @@ def OriginalDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, gene_to_scale,
     )
 
     # Gene expression constraint FBA
-    flux = data_to_flux(sbml, rxn_exp, rxn_exp_sd)
+    flux = data_to_flux(sbml, rxn_exp, rxn_exp_sd, original_method)
 
     # rescale
     flux_scale = exp_flux[exp_rxn_names.index(flux_to_scale)]
@@ -1355,7 +1365,8 @@ def OriginalDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, gene_to_scale,
 
 
 def GimmeGimmeGimme(sbml, gene_names, gene_exp, gene_exp_sd, gene_to_scale,
-                    exp_rxn_names, exp_flux, flux_to_scale):
+                    exp_rxn_names, exp_flux, flux_to_scale,
+                    original_method=False):
 
     cutoff = 0.25  # set threshold at lower quartile
     req_fun = 0.9  # force 90% growth
@@ -1370,7 +1381,7 @@ def GimmeGimmeGimme(sbml, gene_names, gene_exp, gene_exp_sd, gene_to_scale,
     )
 
     # gimme
-    flux = gimme(sbml, rxn_exp, cutoff, req_fun)
+    flux = gimme(sbml, rxn_exp, cutoff, req_fun, original_method)
 
     # rescale
     flux_scale = exp_flux[exp_rxn_names.index(flux_to_scale)]
@@ -1379,9 +1390,10 @@ def GimmeGimmeGimme(sbml, gene_names, gene_exp, gene_exp_sd, gene_to_scale,
     return flux
 
 
-def OriginalFBA(sbml, exp_rxn_names, exp_flux, flux_to_scale):
+def OriginalFBA(sbml, exp_rxn_names, exp_flux, flux_to_scale,
+                original_method=False):
 
-    flux, _ = optimize_cobra_model(sbml)
+    flux, _ = optimize_cobra_model(sbml, original_method)
 
     # rescale
     flux_scale = exp_flux[exp_rxn_names.index(flux_to_scale)]
@@ -1390,13 +1402,14 @@ def OriginalFBA(sbml, exp_rxn_names, exp_flux, flux_to_scale):
     return flux
 
 
-def FittedFBA(sbml, gene_to_scale, exp_rxn_names, exp_flux, flux_to_scale):
+def FittedFBA(sbml, gene_to_scale, exp_rxn_names, exp_flux, flux_to_scale,
+              original_method=False):
 
     data = create_data_array(
         sbml, exp_flux[:], exp_rxn_names[:], gene_to_scale)
 
     flux_scale = exp_flux[exp_rxn_names.index(flux_to_scale)]
-    flux = fba_fitted(sbml, data / flux_scale)
+    flux = fba_fitted(sbml, data / flux_scale, original_method)
 
     # rescale
     flux = [value * flux_scale for value in flux]
@@ -1426,43 +1439,49 @@ def rescale_SBML(sbml, exp_rxn_names, exp_flux, flux_to_scale):
             LB.setValue(flux_scale)
             UB.setValue(flux_scale)
 
+#    # test
+#    print optimize_cobra_model(sbml, original_method=True)[1]
+
 
 def analysis(
-        model_file, genes_file, fluxes_file, gene_to_scale, flux_to_scale):
+        model_file, genes_file, fluxes_file,
+        gene_to_scale, flux_to_scale, original_method=False):
     """Run all analyses on input files."""
+
+    # SuperDaaaaave!
+    # v_SuperDaaaaave = SuperDaaaaave(
+    #    model_file, genes_file, fluxes_file, flux_to_scale)
 
     # MODEL
     sbml = read_sbml(os.path.join(PATH, model_file))
-
-    # SuperDaaaaave!
-    v_SuperDaaaaave = SuperDaaaaave(
-        model_file, genes_file, fluxes_file, flux_to_scale)
-    # v_SuperDaaaaave = [0] * sbml.getModel().getNumReactions()
+    v_SuperDaaaaave = [0] * sbml.getModel().getNumReactions()
 
     # gene data
-    gene_names, gene_exp, gene_exp_sd = load_gene_data(
-        os.path.join(PATH, genes_file))
-
+    gene_names, gene_exp, gene_exp_sd = parse_gene_data(
+        os.path.join(PATH, genes_file)
+    )
     # flux data
     exp_flux, exp_rxn_names = load_flux_data(os.path.join(PATH, fluxes_file))
 
     # OriginalDaaaaave
     v_gene_exp = OriginalDaaaaave(
         sbml, gene_names, gene_exp, gene_exp_sd, gene_to_scale,
-        exp_rxn_names, exp_flux, flux_to_scale)
+        exp_rxn_names, exp_flux, flux_to_scale, original_method
+    )
 
     # GimmeGimmeGimme
     v_gimme = GimmeGimmeGimme(
         sbml, gene_names, gene_exp, gene_exp_sd, gene_to_scale,
-        exp_rxn_names, exp_flux, flux_to_scale)
+        exp_rxn_names, exp_flux, flux_to_scale, original_method
+    )
 
     # OriginalFBA
     v_fba = OriginalFBA(sbml, exp_rxn_names, exp_flux,
-                        flux_to_scale)
+                        flux_to_scale, original_method)
 
     # find best fit from standard FBA solution
     v_fba_best = FittedFBA(sbml, gene_to_scale, exp_rxn_names,
-                           exp_flux, flux_to_scale)
+                           exp_flux, flux_to_scale, original_method)
 
     # compare
     mod_SuperDaaaaave, mod_daaaaave, mod_fba, mod_gimme, mod_fba_best = \
@@ -1473,6 +1492,13 @@ def analysis(
 
     return exp_rxn_names, exp_flux, mod_SuperDaaaaave, mod_daaaaave, \
         mod_fba, mod_fba_best, mod_gimme
+
+
+def read_sbml(filename):
+    """Read an SBML file from specified path."""
+    reader = libsbml.SBMLReader()
+    sbml = reader.readSBMLFromFile(filename)
+    return sbml
 
 
 def rescale_model(sbml, rxn_exp, rxn_exp_sd, gene_to_scale):
@@ -1491,6 +1517,17 @@ def rescale_model(sbml, rxn_exp, rxn_exp_sd, gene_to_scale):
     kinetic_law.getParameter('UPPER_BOUND').setValue(1)
 
     return sbml, rxn_exp, rxn_exp_sd
+
+
+def load_flux_data(fluxes_file):
+
+    rxn_names, exp_flux = [], []
+    with open(fluxes_file, 'r') as csvfile:
+        reader = csv.reader(csvfile, delimiter='\t')
+        for row in reader:
+            rxn_names.append(row[0])
+            exp_flux.append(float(row[1]))
+    return exp_flux, rxn_names
 
 
 def create_data_array(sbml, exp_flux, exp_rxn_names, gene_to_scale):
@@ -1543,12 +1580,179 @@ def format_results(
     return mod_SuperDaaaaave, mod_daaaaave, mod_fba, mod_gimme, mod_fba_best
 
 
-def data_to_flux(sbml, rxn_exp, rxn_exp_sd):
+def parse_gene_data(genes_file):
+    """Translate gene expression data file to arrays."""
+    gene_names, gene_exp, gene_exp_sd = [], [], []
+    with open(genes_file, 'r') as csvfile:
+        reader = csv.DictReader(csvfile, delimiter='\t')
+        for row in reader:
+            gene_names.append(row["gene"])
+            gene_exp.append(float(row["mean"]))
+            gene_exp_sd.append(float(row["std"]))
+    gene_exp, gene_exp_sd = np.array(gene_exp), np.array(gene_exp_sd)
+    return gene_names, gene_exp, gene_exp_sd
+
+
+def get_list_of_gene_associations(sbml):
+
+    gene_list = []
+    model = sbml.getModel()
+    for reaction in model.getListOfReactions():
+        notes = reaction.getNotesString()
+        match = re.search(
+            r'<p>GENE_ASSOCIATION:' + '([^<]*)' + r'</p>', notes
+        )
+        gene_assn = match.group(1)
+        gene_list.append(gene_assn)
+
+    return gene_list
+
+
+def get_list_of_genes(sbml):
+
+    gene_association_list = get_list_of_gene_associations(sbml)
+    gene_list = []
+
+    for gene_assn in gene_association_list:
+        if gene_assn:
+            gene_assn_list = re.findall(r'\b([\w]*)\b', gene_assn)
+            gene_list.extend(gene_assn_list)
+
+    gene_list = set_diff(gene_list, ['and', 'or', 'AND', 'OR', ''])
+
+    return gene_list
+
+
+def genes_to_rxns(
+        sbml, gene_names, gene_exp, gene_exp_sd):
+    """Match gene-level data to reaction-level data."""
+
+    model = sbml.getModel()
+    rxn_exp, rxn_exp_sd = [], []
+    for i in range(len(gene_names)):
+        gene_names[i] = gene_names[i].replace('-', '_')
+
+    list_of_genes = get_list_of_gene_associations(sbml)
+
+    for i in range(model.getNumReactions()):
+        # reaction = model.getReaction(i)
+
+        gene_assn = list_of_genes[i]
+
+        gene_assn = gene_assn.replace('-', '_')
+        gene_assn = gene_assn.replace(' AND ', ' and ')
+        gene_assn = gene_assn.replace(' OR ', ' or ')
+        gene_assn = gene_assn.replace(' )', ')')
+        gene_assn = gene_assn.replace('( ', '(')
+        gene_list = re.findall(r'\b([\w]*)\b', gene_assn)
+        gene_list = set_diff(gene_list, ['and', 'or', ''])
+        for gene in gene_list:
+            j = gene_names.index(gene)
+            ng, ng_sd = gene_exp[j], gene_exp_sd[j]
+            str_ng, str_ng_sd = repr(ng), repr(ng_sd)
+            gene_assn = re.sub(
+                r'\b' + gene + r'\b', str_ng + '~' + str_ng_sd, gene_assn
+            )
+        nr, nr_sd = map_gene_data(gene_assn)
+        rxn_exp.append(nr)
+        rxn_exp_sd.append(nr_sd)
+
+    rxn_exp, rxn_exp_sd = np.array(rxn_exp), np.array(rxn_exp_sd)
+    # sds 0 -> small
+    rxn_exp_sd[rxn_exp_sd == 0] = min(rxn_exp_sd[rxn_exp_sd != 0]) / 2
+    return rxn_exp, rxn_exp_sd
+
+
+def set_diff(a, b):
+    """Return the set difference of the two arrays."""
+    return list(set(a).difference(set(b)))
+
+
+def map_gene_data(gene_assn):
+    """Map string '(x1~x1SD) and (x2~x2SD) or (x3~x3SD)' to string y~ySD."""
+    nr, nr_sd = np.nan, np.nan
+    a_pm_b = r'[0-9\.]+~[0-9\.]+'
+    if gene_assn:
+        while np.isnan(nr):
+            try:
+                match_expr = r'\A([0-9\.]+)~([0-9\.]+)\Z'
+                match = re.search(match_expr, gene_assn)
+                str_nr, str_nr_sd = match.group(1), match.group(2)
+                nr, nr_sd = float(str_nr), float(str_nr_sd)
+            except Exception:
+                # replace brackets
+                match_expr = r'\((' + a_pm_b + r')\)'
+                for match in re.findall(match_expr, gene_assn):
+                    gene_assn = re.sub(r'\(' + match + r'\)', match, gene_assn)
+                # replace ANDs
+                match_expr = '(' + a_pm_b + ') and (' + a_pm_b + ')'
+                for ind, match in enumerate(re.findall(match_expr, gene_assn)):
+                    if ind == 0:
+                        lhs = match[0]
+                        rhs = match[1]
+                        replace_expr = a_and_b(lhs, rhs)
+                        gene_assn = re.sub(
+                            r'\b' + lhs + ' and ' + rhs + r'\b',
+                            replace_expr, gene_assn
+                        )
+                # replace ORs
+                match_expr = r'(' + a_pm_b + r') or (' + a_pm_b + r')'
+                match = re.search(match_expr, gene_assn)
+                for ind, match in enumerate(re.findall(match_expr, gene_assn)):
+                    if ind == 0:
+                        lhs = match[0]
+                        rhs = match[1]
+                        replace_expr = a_or_b(lhs, rhs)
+                        gene_assn = re.sub(
+                            r'\b' + lhs + ' or ' + rhs + r'\b',
+                            replace_expr, gene_assn
+                        )
+    return nr, nr_sd
+
+
+def a_and_b(str1, str2):
+
+    a_pm_b = r'\A([0-9\.]+)~([0-9\.]+)'
+    match_expr = a_pm_b
+    match1 = re.search(match_expr, str1)
+    ng1 = float(match1.group(1))
+    ng1_sd = float(match1.group(2))
+    match2 = re.search(match_expr, str2)
+    ng2 = float(match2.group(1))
+    ng2_sd = float(match2.group(2))
+    ng12, ng12_sd = [ng1, ng2], [ng1_sd, ng2_sd]
+    j = np.argmin(ng12)
+    ng, ng_sd = ng12[j], ng12_sd[j]
+    str_ng, str_ng_sd = repr(ng), repr(ng_sd)
+    return str_ng + '~' + str_ng_sd
+
+
+def a_or_b(str1, str2):
+
+    a_pm_b = r'\A([0-9\.]+)~([0-9\.]+)'
+    match_expr = a_pm_b
+    match1 = re.search(match_expr, str1)
+    ng1 = float(match1.group(1))
+    ng1_sd = float(match1.group(2))
+    match2 = re.search(match_expr, str2)
+    ng2 = float(match2.group(1))
+    ng2_sd = float(match2.group(2))
+    ng = ng1 + ng2
+    ng_sd = np.sqrt(ng1_sd**2. + ng2_sd**2.)
+    str_ng, str_ng_sd = repr(ng), repr(ng_sd)
+    return str_ng + '~' + str_ng_sd
+
+
+def data_to_flux(sbml, rxn_exp, rxn_exp_sd, original_method=False):
     """Daaaaave: predict flux by maximising correlation with data."""
 
     model = sbml.getModel()
     nr_old = 0
-    cobra = convert_sbml_to_cobra(sbml)
+    if original_method:
+        bound = 1000
+    else:
+        bound = np.inf
+    cobra = convert_sbml_to_cobra(sbml, bound)
     v_sol = np.zeros(model.getNumReactions())
 
     while list(cobra['rev']).count(False) > nr_old:
@@ -1630,7 +1834,7 @@ def data_to_flux(sbml, rxn_exp, rxn_exp_sd):
                         cobra['lb'][i] = max(cobra['lb'][i], 0.)
                         cobra['rev'][i] = False
                     else:
-                        if U[i] <= 0 and not False:
+                        if U[i] <= 0 and not original_method:
                             f_opt, conv = 0, True
                         else:
                             f[i] = 1
@@ -1642,8 +1846,8 @@ def data_to_flux(sbml, rxn_exp, rxn_exp_sd):
                                 f_opt = lp.ObjVal
                             else:
                                 f_opt = np.nan
-                        cond1 = (False) and (abs(f_opt) <= 0)
-                        cond2 = (not False) and (f_opt <= 0)
+                        cond1 = (original_method) and (abs(f_opt) <= 0)
+                        cond2 = (not original_method) and (f_opt <= 0)
                         if conv and (cond1 or cond2):  # irreversibly backward
                             cobra['ub'][i] = min(cobra['ub'][i], 0.)
                             cobra['rev'][i] = False
@@ -1836,10 +2040,57 @@ def easy_lp(f, a, b, vlb, vub, one=False):
     return v, f_opt, conv
 
 
-def optimize_cobra_model(sbml):
+def convert_sbml_to_cobra(sbml, bound=np.inf):
+    """Get Cobra matrices from SBML model."""
+    model = sbml.getModel()
+    S = sparse.lil_matrix((model.getNumSpecies(), model.getNumReactions()))
+    lb, ub, c, b, rev, sIDs = [], [], [], [], [], []
+    for species in model.getListOfSpecies():
+        sIDs.append(species.getId())
+        b.append(0.)
+    sIDs = [species.getId() for species in model.getListOfSpecies()]
+    for j, reaction in enumerate(model.getListOfReactions()):
+        for reactant in reaction.getListOfReactants():
+            sID = reactant.getSpecies()
+            s = reactant.getStoichiometry()
+            if not model.getSpecies(sID).getBoundaryCondition():
+                i = sIDs.index(sID)
+                S[i, j] = S[i, j] - s
+        for product in reaction.getListOfProducts():
+            sID = product.getSpecies()
+            s = product.getStoichiometry()
+            if not model.getSpecies(sID).getBoundaryCondition():
+                i = sIDs.index(sID)
+                S[i, j] = S[i, j] + s
+        kinetic_law = reaction.getKineticLaw()
+        rxn_lb = kinetic_law.getParameter('LOWER_BOUND').getValue()
+        rxn_ub = kinetic_law.getParameter('UPPER_BOUND').getValue()
+        rxn_c = kinetic_law.getParameter('OBJECTIVE_COEFFICIENT').getValue()
+        rxn_rev = reaction.getReversible()
+        if rxn_lb < -bound:
+            rxn_lb = -bound
+        if rxn_ub > bound:
+            rxn_ub = bound
+        if rxn_lb < 0:
+            rxn_rev = True
+        lb.append(rxn_lb)
+        ub.append(rxn_ub)
+        c.append(rxn_c)
+        rev.append(rxn_rev)
+    lb, ub, c, b = np.array(lb), np.array(ub), np.array(c), np.array(b)
+    rev = np.array(rev)
+    cobra = {'S': S, 'lb': lb, 'ub': ub, 'c': c, 'b': b, 'rev': rev}
+    return cobra
+
+
+def optimize_cobra_model(sbml, original_method=False):
     """Replicate Cobra command optimizeCbModel(model,[],'one')."""
 
-    cobra = convert_sbml_to_cobra(sbml)
+    if original_method:
+        bound = 1000
+    else:
+        bound = np.inf
+    cobra = convert_sbml_to_cobra(sbml, bound)
 
     N, L, U = cobra['S'], list(cobra['lb']), list(cobra['ub'])
     f, b = list(cobra['c']), list(cobra['b'])
@@ -1850,12 +2101,12 @@ def optimize_cobra_model(sbml):
 
 def gimme(
         sbml, gene_exp,
-        cutoff_threshold=0.25, req_fun=0.9):
+        cutoff_threshold=0.25, req_fun=0.9, original_method=False):
     """Gimme method."""
     model = sbml.getModel()
 
     # set "required metabolic functionalities"
-    f_opt = optimize_cobra_model(sbml)[1]
+    f_opt = optimize_cobra_model(sbml, original_method)[1]
     c = [
         reaction.getKineticLaw()
         .getParameter('OBJECTIVE_COEFFICIENT').getValue()
@@ -1866,9 +2117,14 @@ def gimme(
         req_fun * f_opt)
 
     cutoff_percent = 100. * cutoff_threshold
-    cutoff = np.percentile(gene_exp, cutoff_percent)
+    if original_method:
+        cutoff = prctile(gene_exp, cutoff_percent)
+        bound = 1000
+    else:
+        cutoff = np.percentile(gene_exp, cutoff_percent)
+        bound = np.inf
 
-    cobra = convert_sbml_to_cobra(sbml)
+    cobra = convert_sbml_to_cobra(sbml, bound=bound)
     S, L, U = cobra['S'], list(cobra['lb']), list(cobra['ub'])
     f, b = list(cobra['c']), list(cobra['b'])
     f = [0.] * len(f)
@@ -1896,9 +2152,26 @@ def gimme(
     return v_sol
 
 
-def fba_fitted(sbml, data):
+def prctile(x, p):
+    """Implementation of MatLab percentile function."""
+    x = np.array(x)
+    x = x[~np.isnan(x)]
+    x.sort()
+    nr = len(x)
+    q = 100 * (np.array(range(nr)) + 0.5) / nr
+    v = np.interp(p, q, x)
+    return v
+
+
+def shlomi(sbml):
+    """[Shlomi method is not implemented.]"""
+    model = sbml.getModel()
+    return np.zeros(model.getNumReactions())
+
+
+def fba_fitted(sbml, data, original_method=False):
     """FBA solution that best fits data."""
-    f_opt = optimize_cobra_model(sbml)[1]
+    f_opt = optimize_cobra_model(sbml, original_method)[1]
     model = sbml.getModel()
     c = [
         reaction.getKineticLaw()
@@ -1907,8 +2180,11 @@ def fba_fitted(sbml, data):
     ]
     biomass = model.getReaction(c.index(1))
     biomass.getKineticLaw().getParameter('LOWER_BOUND').setValue(f_opt)
-
-    cobra = convert_sbml_to_cobra(sbml)
+    if original_method:
+        bound = 1000
+    else:
+        bound = np.inf
+    cobra = convert_sbml_to_cobra(sbml, bound)
     N, L, U = cobra['S'].copy(), list(cobra['lb']), list(cobra['ub'])
     f, b = list(cobra['c']), list(cobra['b'])
     f = [0.] * len(f)
