@@ -45,7 +45,7 @@ from sklearn.metrics import r2_score
 from sympy.logic import boolalg
 
 import numpy as np
-from python.data import load_flux_data, load_gene_data
+from python.data import genes_to_rxns, load_flux_data, load_gene_data
 from python.model import get_gene_associations, read_sbml
 import scipy.sparse as sparse
 
@@ -1560,126 +1560,6 @@ def format_results(
     mod_fba_best[abs(mod_fba_best) < 1e-6] = 0
 
     return mod_SuperDaaaaave, mod_daaaaave, mod_fba, mod_gimme, mod_fba_best
-
-
-def genes_to_rxns(
-        sbml, gene_names, gene_exp, gene_exp_sd):
-    """Match gene-level data to reaction-level data."""
-
-    model = sbml.getModel()
-    rxn_exp, rxn_exp_sd = [], []
-    for i in range(len(gene_names)):
-        gene_names[i] = gene_names[i].replace('-', '_')
-
-    list_of_genes = get_gene_associations(sbml)
-
-    for i in range(model.getNumReactions()):
-        # reaction = model.getReaction(i)
-
-        gene_assn = list_of_genes[i]
-
-        gene_assn = gene_assn.replace('-', '_')
-        gene_assn = gene_assn.replace(' AND ', ' and ')
-        gene_assn = gene_assn.replace(' OR ', ' or ')
-        gene_assn = gene_assn.replace(' )', ')')
-        gene_assn = gene_assn.replace('( ', '(')
-        gene_list = re.findall(r'\b([\w]*)\b', gene_assn)
-        gene_list = set_diff(gene_list, ['and', 'or', ''])
-        for gene in gene_list:
-            j = gene_names.index(gene)
-            ng, ng_sd = gene_exp[j], gene_exp_sd[j]
-            str_ng, str_ng_sd = repr(ng), repr(ng_sd)
-            gene_assn = re.sub(
-                r'\b' + gene + r'\b', str_ng + '~' + str_ng_sd, gene_assn
-            )
-        nr, nr_sd = map_gene_data(gene_assn)
-        rxn_exp.append(nr)
-        rxn_exp_sd.append(nr_sd)
-
-    rxn_exp, rxn_exp_sd = np.array(rxn_exp), np.array(rxn_exp_sd)
-    # sds 0 -> small
-    rxn_exp_sd[rxn_exp_sd == 0] = min(rxn_exp_sd[rxn_exp_sd != 0]) / 2
-    return rxn_exp, rxn_exp_sd
-
-
-def set_diff(a, b):
-    """Return the set difference of the two arrays."""
-    return list(set(a).difference(set(b)))
-
-
-def map_gene_data(gene_assn):
-    """Map string '(x1~x1SD) and (x2~x2SD) or (x3~x3SD)' to string y~ySD."""
-    nr, nr_sd = np.nan, np.nan
-    a_pm_b = r'[0-9\.]+~[0-9\.]+'
-    if gene_assn:
-        while np.isnan(nr):
-            try:
-                match_expr = r'\A([0-9\.]+)~([0-9\.]+)\Z'
-                match = re.search(match_expr, gene_assn)
-                str_nr, str_nr_sd = match.group(1), match.group(2)
-                nr, nr_sd = float(str_nr), float(str_nr_sd)
-            except Exception:
-                # replace brackets
-                match_expr = r'\((' + a_pm_b + r')\)'
-                for match in re.findall(match_expr, gene_assn):
-                    gene_assn = re.sub(r'\(' + match + r'\)', match, gene_assn)
-                # replace ANDs
-                match_expr = '(' + a_pm_b + ') and (' + a_pm_b + ')'
-                for ind, match in enumerate(re.findall(match_expr, gene_assn)):
-                    if ind == 0:
-                        lhs = match[0]
-                        rhs = match[1]
-                        replace_expr = a_and_b(lhs, rhs)
-                        gene_assn = re.sub(
-                            r'\b' + lhs + ' and ' + rhs + r'\b',
-                            replace_expr, gene_assn
-                        )
-                # replace ORs
-                match_expr = r'(' + a_pm_b + r') or (' + a_pm_b + r')'
-                match = re.search(match_expr, gene_assn)
-                for ind, match in enumerate(re.findall(match_expr, gene_assn)):
-                    if ind == 0:
-                        lhs = match[0]
-                        rhs = match[1]
-                        replace_expr = a_or_b(lhs, rhs)
-                        gene_assn = re.sub(
-                            r'\b' + lhs + ' or ' + rhs + r'\b',
-                            replace_expr, gene_assn
-                        )
-    return nr, nr_sd
-
-
-def a_and_b(str1, str2):
-
-    a_pm_b = r'\A([0-9\.]+)~([0-9\.]+)'
-    match_expr = a_pm_b
-    match1 = re.search(match_expr, str1)
-    ng1 = float(match1.group(1))
-    ng1_sd = float(match1.group(2))
-    match2 = re.search(match_expr, str2)
-    ng2 = float(match2.group(1))
-    ng2_sd = float(match2.group(2))
-    ng12, ng12_sd = [ng1, ng2], [ng1_sd, ng2_sd]
-    j = np.argmin(ng12)
-    ng, ng_sd = ng12[j], ng12_sd[j]
-    str_ng, str_ng_sd = repr(ng), repr(ng_sd)
-    return str_ng + '~' + str_ng_sd
-
-
-def a_or_b(str1, str2):
-
-    a_pm_b = r'\A([0-9\.]+)~([0-9\.]+)'
-    match_expr = a_pm_b
-    match1 = re.search(match_expr, str1)
-    ng1 = float(match1.group(1))
-    ng1_sd = float(match1.group(2))
-    match2 = re.search(match_expr, str2)
-    ng2 = float(match2.group(1))
-    ng2_sd = float(match2.group(2))
-    ng = ng1 + ng2
-    ng_sd = np.sqrt(ng1_sd**2. + ng2_sd**2.)
-    str_ng, str_ng_sd = repr(ng), repr(ng_sd)
-    return str_ng + '~' + str_ng_sd
 
 
 def data_to_flux(sbml, rxn_exp, rxn_exp_sd, original_method=False):
