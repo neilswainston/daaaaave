@@ -37,16 +37,16 @@ http://github.com/u003f/transcript2flux
 # pylint: disable=too-many-nested-blocks
 # pylint: disable=too-many-statements
 # pylint: disable=wrong-import-order
-import csv
 import os
 import re
 
 import gurobipy
-import libsbml
 from sklearn.metrics import r2_score
 from sympy.logic import boolalg
 
 import numpy as np
+from python.data import load_flux_data, load_gene_data
+from python.model import read_sbml
 import scipy.sparse as sparse
 
 
@@ -66,11 +66,11 @@ def test_ComparisonDaaaaave():
     # create some relative daaaaata
     gene_names, gene_exp, gene_exp_sd = [], [], []
     # 75%: condition 1
-    gene_names_75, gene_exp_75, gene_exp_sd_75 = parse_gene_data(
+    gene_names_75, gene_exp_75, gene_exp_sd_75 = load_gene_data(
         os.path.join(PATH, 'genedata_75.txt')
     )
     # 8%: condition 2
-    gene_names_85, gene_exp_85, gene_exp_sd_85 = parse_gene_data(
+    gene_names_85, gene_exp_85, gene_exp_sd_85 = load_gene_data(
         os.path.join(PATH, 'genedata_85.txt')
     )
 #     # remove zero entries
@@ -1253,7 +1253,7 @@ def SuperDaaaaave(model_file, genes_file, fluxes_file, flux_to_scale):
     # sbml = read_sbml(os.path.join(PATH, model_file))
 
     # gene data
-    gene_names, gene_exp, gene_exp_sd = parse_gene_data(
+    gene_names, gene_exp, gene_exp_sd = load_gene_data(
         os.path.join(PATH, genes_file)
     )
     # flux data
@@ -1457,7 +1457,7 @@ def analysis(
     v_SuperDaaaaave = [0] * sbml.getModel().getNumReactions()
 
     # gene data
-    gene_names, gene_exp, gene_exp_sd = parse_gene_data(
+    gene_names, gene_exp, gene_exp_sd = load_gene_data(
         os.path.join(PATH, genes_file)
     )
     # flux data
@@ -1494,13 +1494,6 @@ def analysis(
         mod_fba, mod_fba_best, mod_gimme
 
 
-def read_sbml(filename):
-    """Read an SBML file from specified path."""
-    reader = libsbml.SBMLReader()
-    sbml = reader.readSBMLFromFile(filename)
-    return sbml
-
-
 def rescale_model(sbml, rxn_exp, rxn_exp_sd, gene_to_scale):
 
     model = sbml.getModel()
@@ -1517,17 +1510,6 @@ def rescale_model(sbml, rxn_exp, rxn_exp_sd, gene_to_scale):
     kinetic_law.getParameter('UPPER_BOUND').setValue(1)
 
     return sbml, rxn_exp, rxn_exp_sd
-
-
-def load_flux_data(fluxes_file):
-
-    rxn_names, exp_flux = [], []
-    with open(fluxes_file, 'r') as csvfile:
-        reader = csv.reader(csvfile, delimiter='\t')
-        for row in reader:
-            rxn_names.append(row[0])
-            exp_flux.append(float(row[1]))
-    return exp_flux, rxn_names
 
 
 def create_data_array(sbml, exp_flux, exp_rxn_names, gene_to_scale):
@@ -1578,19 +1560,6 @@ def format_results(
     mod_fba_best[abs(mod_fba_best) < 1e-6] = 0
 
     return mod_SuperDaaaaave, mod_daaaaave, mod_fba, mod_gimme, mod_fba_best
-
-
-def parse_gene_data(genes_file):
-    """Translate gene expression data file to arrays."""
-    gene_names, gene_exp, gene_exp_sd = [], [], []
-    with open(genes_file, 'r') as csvfile:
-        reader = csv.DictReader(csvfile, delimiter='\t')
-        for row in reader:
-            gene_names.append(row["gene"])
-            gene_exp.append(float(row["mean"]))
-            gene_exp_sd.append(float(row["std"]))
-    gene_exp, gene_exp_sd = np.array(gene_exp), np.array(gene_exp_sd)
-    return gene_names, gene_exp, gene_exp_sd
 
 
 def get_list_of_gene_associations(sbml):
