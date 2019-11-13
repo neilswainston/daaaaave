@@ -51,11 +51,7 @@ from python.model import convert_sbml_to_cobra, get_gene_associations, \
 import scipy.sparse as sparse
 
 
-# http://www.gurobi.com/documentation/6.0/quickstart_mac/py_python_interface.html
-# http://frank-fbergmann.blogspot.co.uk/2014/05/libsbml-python-bindings-5101.html
 PATH = os.path.join(os.path.dirname(__file__), 'data')
-EPS = 2.**(-52.)
-
 LP_TOL = 1e-6
 
 
@@ -498,7 +494,7 @@ def call_SuperDaaaaave_SOS(sbml, gene_names, gene_exp, gene_exp_sd,
     if statMaxGrowth == 1.:
         # use max growth if SuperDaaaaave does not converge
         solnMaxGrowth = solution_full
-#         objMaxGrowth = np.floor(solution_obj/EPS)*EPS # round down a touch
+
         if abs(solution_obj) < LP_TOL:
             objMaxGrowth = 0.
         else:
@@ -701,7 +697,6 @@ def call_SuperDaaaaave_SOS(sbml, gene_names, gene_exp, gene_exp_sd,
         f, S, b, L, U, csense, vartype, ic=feas, sos=sos_list)
 
     # set objective as constraint
-#     obj = np.floor(obj/EPS)*EPS # round down a touch
     if abs(obj) < LP_TOL:
         obj = 0.
     else:
@@ -751,7 +746,6 @@ def call_SuperDaaaaave_SOS(sbml, gene_names, gene_exp, gene_exp_sd,
         f, S, b, L, U, csense, vartype, ic=init, sos=sos_list)
 
     if conv:
-        #         obj = np.floor(obj/EPS)*EPS # round down a touch
         if abs(obj) < LP_TOL:
             obj = 0.
         else:
@@ -855,7 +849,7 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd,
     if FixScaling:
         feas0 = feas0 * FixScaling
     feas = np.array(feas0)
-#
+
     solution_full, solution_obj, statMaxGrowth = easy_lp(
         fMaxGrowth, S, b, L, U, one=True)
     solnMaxGrowth = np.zeros(nR)
@@ -863,12 +857,12 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd,
     if statMaxGrowth == 1.:
         # use max growth if SuperDaaaaave does not converge
         solnMaxGrowth = solution_full
-#         objMaxGrowth = np.floor(solution_obj/EPS)*EPS # round down a touch
+
         if abs(solution_obj) < LP_TOL:
             objMaxGrowth = 0.
         else:
             objMaxGrowth = solution_obj - LP_TOL  # round down a touch
-#
+
     # create positive FBA problem
     S = sparse.vstack([
         sparse.hstack([S, sparse.lil_matrix((nS, 2 * nR))]),
@@ -883,7 +877,7 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd,
     x = np.append(feas0, -feas0)
     x[x < 0] = 0
     feas = np.append(feas, x)
-#
+
     # only allow positive or negative flux
     M = BIG_NUMBER * \
         max(abs(np.hstack([U[np.isfinite(U)], L[np.isfinite(L)], gene_exp])))
@@ -1112,7 +1106,6 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd,
     soln, obj, _ = easy_milp(f, S, b, L, U, csense, vartype, ic=feas)
 #
     # set objective as constraint
-#     obj = np.floor(obj/EPS)*EPS # round down a touch
     if abs(obj) < LP_TOL:
         obj = 0.
     else:
@@ -1162,7 +1155,6 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd,
     soln, obj, conv = easy_milp_sos(f, S, b, L, U, csense, vartype, ic=init)
 #
     if conv:
-        #         obj = np.floor(obj/EPS)*EPS # round down a touch
         if abs(obj) < LP_TOL:
             obj = 0.
         else:
@@ -1364,8 +1356,7 @@ def OriginalDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, gene_to_scale,
 
 
 def GimmeGimmeGimme(sbml, gene_names, gene_exp, gene_exp_sd, gene_to_scale,
-                    exp_rxn_names, exp_flux, flux_to_scale,
-                    original_method=False):
+                    exp_rxn_names, exp_flux, flux_to_scale):
 
     cutoff = 0.25  # set threshold at lower quartile
     req_fun = 0.9  # force 90% growth
@@ -1380,7 +1371,7 @@ def GimmeGimmeGimme(sbml, gene_names, gene_exp, gene_exp_sd, gene_to_scale,
     )
 
     # gimme
-    flux = gimme(sbml, rxn_exp, cutoff, req_fun, original_method)
+    flux = gimme(sbml, rxn_exp, cutoff, req_fun)
 
     # rescale
     flux_scale = exp_flux[exp_rxn_names.index(flux_to_scale)]
@@ -1436,9 +1427,6 @@ def rescale_SBML(sbml, exp_rxn_names, exp_flux, flux_to_scale):
             LB.setValue(flux_scale)
             UB.setValue(flux_scale)
 
-#    # test
-#    print optimize_cobra_model(sbml, original_method=True)[1]
-
 
 def analysis(
         model_file, genes_file, fluxes_file,
@@ -1469,8 +1457,7 @@ def analysis(
     # GimmeGimmeGimme
     v_gimme = GimmeGimmeGimme(
         sbml, gene_names, gene_exp, gene_exp_sd, gene_to_scale,
-        exp_rxn_names, exp_flux, flux_to_scale, original_method
-    )
+        exp_rxn_names, exp_flux, flux_to_scale)
 
     # OriginalFBA
     v_fba = OriginalFBA(sbml, exp_rxn_names, exp_flux, flux_to_scale)
@@ -1864,7 +1851,7 @@ def optimize_cobra_model(sbml):
 
 def gimme(
         sbml, gene_exp,
-        cutoff_threshold=0.25, req_fun=0.9, original_method=False):
+        cutoff_threshold=0.25, req_fun=0.9):
     """Gimme method."""
     model = sbml.getModel()
 
@@ -1880,10 +1867,7 @@ def gimme(
         req_fun * f_opt)
 
     cutoff_percent = 100. * cutoff_threshold
-    if original_method:
-        cutoff = prctile(gene_exp, cutoff_percent)
-    else:
-        cutoff = np.percentile(gene_exp, cutoff_percent)
+    cutoff = prctile(gene_exp, cutoff_percent)
 
     cobra = convert_sbml_to_cobra(sbml)
     S, L, U = cobra['S'], list(cobra['lb']), list(cobra['ub'])
