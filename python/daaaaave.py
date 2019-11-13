@@ -46,7 +46,7 @@ from sympy.logic import boolalg
 
 import numpy as np
 from python.data import load_flux_data, load_gene_data
-from python.model import read_sbml
+from python.model import get_gene_associations, read_sbml
 import scipy.sparse as sparse
 
 
@@ -163,7 +163,7 @@ def call_ComparisonDaaaaave(sbml_in, gene_names, gene_exp, _, exp_flux):
 
     # replace characters in gene identifiers
     gene_names = [gene.replace('-', '_') for gene in gene_names]
-    model_grRules = get_list_of_gene_associations(sbml)
+    model_grRules = get_gene_associations(sbml)
     model_grRules = [gene.replace('-', '_') for gene in model_grRules]
     model_rxns = [reaction.getId() for reaction in model.getListOfReactions()]
 
@@ -465,7 +465,7 @@ def call_SuperDaaaaave_SOS(sbml, gene_names, gene_exp, gene_exp_sd,
 
     # replace characters in gene identifiers
     gene_names = [gene.replace('-', '_') for gene in gene_names]
-    model_grRules = get_list_of_gene_associations(sbml)
+    model_grRules = get_gene_associations(sbml)
     model_grRules = [gene.replace('-', '_') for gene in model_grRules]
 
     cobra = convert_sbml_to_cobra(sbml)
@@ -830,7 +830,7 @@ def call_SuperDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd,
 #
     # replace characters in gene identifiers
     gene_names = [gene.replace('-', '_') for gene in gene_names]
-    model_grRules = get_list_of_gene_associations(sbml)
+    model_grRules = get_gene_associations(sbml)
     model_grRules = [gene.replace('-', '_') for gene in model_grRules]
 #
     cobra = convert_sbml_to_cobra(sbml)
@@ -1562,36 +1562,6 @@ def format_results(
     return mod_SuperDaaaaave, mod_daaaaave, mod_fba, mod_gimme, mod_fba_best
 
 
-def get_list_of_gene_associations(sbml):
-
-    gene_list = []
-    model = sbml.getModel()
-    for reaction in model.getListOfReactions():
-        notes = reaction.getNotesString()
-        match = re.search(
-            r'<p>GENE_ASSOCIATION:' + '([^<]*)' + r'</p>', notes
-        )
-        gene_assn = match.group(1)
-        gene_list.append(gene_assn)
-
-    return gene_list
-
-
-def get_list_of_genes(sbml):
-
-    gene_association_list = get_list_of_gene_associations(sbml)
-    gene_list = []
-
-    for gene_assn in gene_association_list:
-        if gene_assn:
-            gene_assn_list = re.findall(r'\b([\w]*)\b', gene_assn)
-            gene_list.extend(gene_assn_list)
-
-    gene_list = set_diff(gene_list, ['and', 'or', 'AND', 'OR', ''])
-
-    return gene_list
-
-
 def genes_to_rxns(
         sbml, gene_names, gene_exp, gene_exp_sd):
     """Match gene-level data to reaction-level data."""
@@ -1601,7 +1571,7 @@ def genes_to_rxns(
     for i in range(len(gene_names)):
         gene_names[i] = gene_names[i].replace('-', '_')
 
-    list_of_genes = get_list_of_gene_associations(sbml)
+    list_of_genes = get_gene_associations(sbml)
 
     for i in range(model.getNumReactions()):
         # reaction = model.getReaction(i)
