@@ -39,11 +39,12 @@ import os
 import re
 
 import gurobipy
-import libsbml
 from sklearn.metrics import r2_score
 from sympy.logic import boolalg
 
 import numpy as np
+from python.model import convert_sbml_to_cobra, read_sbml
+from python.utils import set_diff
 import scipy.sparse as sparse
 
 
@@ -1480,13 +1481,6 @@ def analysis(
         mod_fba, mod_fba_best, mod_gimme
 
 
-def read_sbml(filename):
-    """Read an SBML file from specified path."""
-    reader = libsbml.SBMLReader()
-    sbml = reader.readSBMLFromFile(filename)
-    return sbml
-
-
 def rescale_model(sbml, rxn_exp, rxn_exp_sd, gene_to_scale):
 
     model = sbml.getModel()
@@ -1649,11 +1643,6 @@ def genes_to_rxns(
     return rxn_exp, rxn_exp_sd
 
 
-def set_diff(a, b):
-    """Return the set difference of the two arrays."""
-    return list(set(a).difference(set(b)))
-
-
 def map_gene_data(gene_assn):
     """Map string '(x1~x1SD) and (x2~x2SD) or (x3~x3SD)' to string y~ySD."""
     nr, nr_sd = np.nan, np.nan
@@ -1734,8 +1723,7 @@ def data_to_flux(sbml, rxn_exp, rxn_exp_sd):
 
     model = sbml.getModel()
     nr_old = 0
-    bound = np.inf
-    cobra = convert_sbml_to_cobra(sbml, bound)
+    cobra = convert_sbml_to_cobra(sbml)
     v_sol = np.zeros(model.getNumReactions())
 
     while list(cobra['rev']).count(False) > nr_old:
@@ -2023,54 +2011,10 @@ def easy_lp(f, a, b, vlb, vub, one=False):
     return v, f_opt, conv
 
 
-def convert_sbml_to_cobra(sbml, bound=np.inf):
-    """Get Cobra matrices from SBML model."""
-    model = sbml.getModel()
-    S = sparse.lil_matrix((model.getNumSpecies(), model.getNumReactions()))
-    lb, ub, c, b, rev, sIDs = [], [], [], [], [], []
-    for species in model.getListOfSpecies():
-        sIDs.append(species.getId())
-        b.append(0.)
-    sIDs = [species.getId() for species in model.getListOfSpecies()]
-    for j, reaction in enumerate(model.getListOfReactions()):
-        for reactant in reaction.getListOfReactants():
-            sID = reactant.getSpecies()
-            s = reactant.getStoichiometry()
-            if not model.getSpecies(sID).getBoundaryCondition():
-                i = sIDs.index(sID)
-                S[i, j] = S[i, j] - s
-        for product in reaction.getListOfProducts():
-            sID = product.getSpecies()
-            s = product.getStoichiometry()
-            if not model.getSpecies(sID).getBoundaryCondition():
-                i = sIDs.index(sID)
-                S[i, j] = S[i, j] + s
-        kinetic_law = reaction.getKineticLaw()
-        rxn_lb = kinetic_law.getParameter('LOWER_BOUND').getValue()
-        rxn_ub = kinetic_law.getParameter('UPPER_BOUND').getValue()
-        rxn_c = kinetic_law.getParameter('OBJECTIVE_COEFFICIENT').getValue()
-        rxn_rev = reaction.getReversible()
-        if rxn_lb < -bound:
-            rxn_lb = -bound
-        if rxn_ub > bound:
-            rxn_ub = bound
-        if rxn_lb < 0:
-            rxn_rev = True
-        lb.append(rxn_lb)
-        ub.append(rxn_ub)
-        c.append(rxn_c)
-        rev.append(rxn_rev)
-    lb, ub, c, b = np.array(lb), np.array(ub), np.array(c), np.array(b)
-    rev = np.array(rev)
-    cobra = {'S': S, 'lb': lb, 'ub': ub, 'c': c, 'b': b, 'rev': rev}
-    return cobra
-
-
 def optimize_cobra_model(sbml):
     """Replicate Cobra command optimizeCbModel(model,[],'one')."""
 
-    bound = np.inf
-    cobra = convert_sbml_to_cobra(sbml, bound)
+    cobra = convert_sbml_to_cobra(sbml)
 
     N, L, U = cobra['S'], list(cobra['lb']), list(cobra['ub'])
     f, b = list(cobra['c']), list(cobra['b'])
@@ -2098,9 +2042,8 @@ def gimme(
 
     cutoff_percent = 100. * cutoff_threshold
     cutoff = np.percentile(gene_exp, cutoff_percent)
-    bound = np.inf
 
-    cobra = convert_sbml_to_cobra(sbml, bound=bound)
+    cobra = convert_sbml_to_cobra(sbml)
     S, L, U = cobra['S'], list(cobra['lb']), list(cobra['ub'])
     f, b = list(cobra['c']), list(cobra['b'])
     f = [0.] * len(f)
@@ -2145,8 +2088,8 @@ def fba_fitted(sbml, data):
     ]
     biomass = model.getReaction(c.index(1))
     biomass.getKineticLaw().getParameter('LOWER_BOUND').setValue(f_opt)
-    bound = np.inf
-    cobra = convert_sbml_to_cobra(sbml, bound)
+
+    cobra = convert_sbml_to_cobra(sbml)
     N, L, U = cobra['S'].copy(), list(cobra['lb']), list(cobra['ub'])
     f, b = list(cobra['c']), list(cobra['b'])
     f = [0.] * len(f)
