@@ -46,7 +46,8 @@ from sympy.logic import boolalg
 
 import numpy as np
 from python.data import genes_to_rxns, load_flux_data, load_gene_data
-from python.model import get_gene_associations, read_sbml
+from python.model import convert_sbml_to_cobra, get_gene_associations, \
+    read_sbml
 import scipy.sparse as sparse
 
 
@@ -382,8 +383,6 @@ def call_ComparisonDaaaaave(sbml_in, gene_names, gene_exp, _, exp_flux):
 
 
 def FVA(sbml):
-
-    # model = sbml.getModel()
 
     cobra = convert_sbml_to_cobra(sbml)
     a = cobra['S']
@@ -1390,10 +1389,9 @@ def GimmeGimmeGimme(sbml, gene_names, gene_exp, gene_exp_sd, gene_to_scale,
     return flux
 
 
-def OriginalFBA(sbml, exp_rxn_names, exp_flux, flux_to_scale,
-                original_method=False):
+def OriginalFBA(sbml, exp_rxn_names, exp_flux, flux_to_scale):
 
-    flux, _ = optimize_cobra_model(sbml, original_method)
+    flux, _ = optimize_cobra_model(sbml)
 
     # rescale
     flux_scale = exp_flux[exp_rxn_names.index(flux_to_scale)]
@@ -1402,14 +1400,13 @@ def OriginalFBA(sbml, exp_rxn_names, exp_flux, flux_to_scale,
     return flux
 
 
-def FittedFBA(sbml, gene_to_scale, exp_rxn_names, exp_flux, flux_to_scale,
-              original_method=False):
+def FittedFBA(sbml, gene_to_scale, exp_rxn_names, exp_flux, flux_to_scale):
 
     data = create_data_array(
         sbml, exp_flux[:], exp_rxn_names[:], gene_to_scale)
 
     flux_scale = exp_flux[exp_rxn_names.index(flux_to_scale)]
-    flux = fba_fitted(sbml, data / flux_scale, original_method)
+    flux = fba_fitted(sbml, data / flux_scale)
 
     # rescale
     flux = [value * flux_scale for value in flux]
@@ -1476,12 +1473,11 @@ def analysis(
     )
 
     # OriginalFBA
-    v_fba = OriginalFBA(sbml, exp_rxn_names, exp_flux,
-                        flux_to_scale, original_method)
+    v_fba = OriginalFBA(sbml, exp_rxn_names, exp_flux, flux_to_scale)
 
     # find best fit from standard FBA solution
     v_fba_best = FittedFBA(sbml, gene_to_scale, exp_rxn_names,
-                           exp_flux, flux_to_scale, original_method)
+                           exp_flux, flux_to_scale)
 
     # compare
     mod_SuperDaaaaave, mod_daaaaave, mod_fba, mod_gimme, mod_fba_best = \
@@ -1567,11 +1563,7 @@ def data_to_flux(sbml, rxn_exp, rxn_exp_sd, original_method=False):
 
     model = sbml.getModel()
     nr_old = 0
-    if original_method:
-        bound = 1000
-    else:
-        bound = np.inf
-    cobra = convert_sbml_to_cobra(sbml, bound)
+    cobra = convert_sbml_to_cobra(sbml)
     v_sol = np.zeros(model.getNumReactions())
 
     while list(cobra['rev']).count(False) > nr_old:
@@ -1859,57 +1851,9 @@ def easy_lp(f, a, b, vlb, vub, one=False):
     return v, f_opt, conv
 
 
-def convert_sbml_to_cobra(sbml, bound=np.inf):
-    """Get Cobra matrices from SBML model."""
-    model = sbml.getModel()
-    S = sparse.lil_matrix((model.getNumSpecies(), model.getNumReactions()))
-    lb, ub, c, b, rev, sIDs = [], [], [], [], [], []
-    for species in model.getListOfSpecies():
-        sIDs.append(species.getId())
-        b.append(0.)
-    sIDs = [species.getId() for species in model.getListOfSpecies()]
-    for j, reaction in enumerate(model.getListOfReactions()):
-        for reactant in reaction.getListOfReactants():
-            sID = reactant.getSpecies()
-            s = reactant.getStoichiometry()
-            if not model.getSpecies(sID).getBoundaryCondition():
-                i = sIDs.index(sID)
-                S[i, j] = S[i, j] - s
-        for product in reaction.getListOfProducts():
-            sID = product.getSpecies()
-            s = product.getStoichiometry()
-            if not model.getSpecies(sID).getBoundaryCondition():
-                i = sIDs.index(sID)
-                S[i, j] = S[i, j] + s
-        kinetic_law = reaction.getKineticLaw()
-        rxn_lb = kinetic_law.getParameter('LOWER_BOUND').getValue()
-        rxn_ub = kinetic_law.getParameter('UPPER_BOUND').getValue()
-        rxn_c = kinetic_law.getParameter('OBJECTIVE_COEFFICIENT').getValue()
-        rxn_rev = reaction.getReversible()
-        if rxn_lb < -bound:
-            rxn_lb = -bound
-        if rxn_ub > bound:
-            rxn_ub = bound
-        if rxn_lb < 0:
-            rxn_rev = True
-        lb.append(rxn_lb)
-        ub.append(rxn_ub)
-        c.append(rxn_c)
-        rev.append(rxn_rev)
-    lb, ub, c, b = np.array(lb), np.array(ub), np.array(c), np.array(b)
-    rev = np.array(rev)
-    cobra = {'S': S, 'lb': lb, 'ub': ub, 'c': c, 'b': b, 'rev': rev}
-    return cobra
-
-
-def optimize_cobra_model(sbml, original_method=False):
+def optimize_cobra_model(sbml):
     """Replicate Cobra command optimizeCbModel(model,[],'one')."""
-
-    if original_method:
-        bound = 1000
-    else:
-        bound = np.inf
-    cobra = convert_sbml_to_cobra(sbml, bound)
+    cobra = convert_sbml_to_cobra(sbml)
 
     N, L, U = cobra['S'], list(cobra['lb']), list(cobra['ub'])
     f, b = list(cobra['c']), list(cobra['b'])
@@ -1925,7 +1869,7 @@ def gimme(
     model = sbml.getModel()
 
     # set "required metabolic functionalities"
-    f_opt = optimize_cobra_model(sbml, original_method)[1]
+    f_opt = optimize_cobra_model(sbml)[1]
     c = [
         reaction.getKineticLaw()
         .getParameter('OBJECTIVE_COEFFICIENT').getValue()
@@ -1938,12 +1882,10 @@ def gimme(
     cutoff_percent = 100. * cutoff_threshold
     if original_method:
         cutoff = prctile(gene_exp, cutoff_percent)
-        bound = 1000
     else:
         cutoff = np.percentile(gene_exp, cutoff_percent)
-        bound = np.inf
 
-    cobra = convert_sbml_to_cobra(sbml, bound=bound)
+    cobra = convert_sbml_to_cobra(sbml)
     S, L, U = cobra['S'], list(cobra['lb']), list(cobra['ub'])
     f, b = list(cobra['c']), list(cobra['b'])
     f = [0.] * len(f)
@@ -1982,15 +1924,9 @@ def prctile(x, p):
     return v
 
 
-def shlomi(sbml):
-    """[Shlomi method is not implemented.]"""
-    model = sbml.getModel()
-    return np.zeros(model.getNumReactions())
-
-
-def fba_fitted(sbml, data, original_method=False):
+def fba_fitted(sbml, data):
     """FBA solution that best fits data."""
-    f_opt = optimize_cobra_model(sbml, original_method)[1]
+    f_opt = optimize_cobra_model(sbml)[1]
     model = sbml.getModel()
     c = [
         reaction.getKineticLaw()
@@ -1999,11 +1935,7 @@ def fba_fitted(sbml, data, original_method=False):
     ]
     biomass = model.getReaction(c.index(1))
     biomass.getKineticLaw().getParameter('LOWER_BOUND').setValue(f_opt)
-    if original_method:
-        bound = 1000
-    else:
-        bound = np.inf
-    cobra = convert_sbml_to_cobra(sbml, bound)
+    cobra = convert_sbml_to_cobra(sbml)
     N, L, U = cobra['S'].copy(), list(cobra['lb']), list(cobra['ub'])
     f, b = list(cobra['c']), list(cobra['b'])
     f = [0.] * len(f)
@@ -2033,5 +1965,3 @@ def fba_fitted(sbml, data, original_method=False):
 
 if __name__ == '__main__':
     results()
-#     test_ComparisonDaaaaave()
-    print('DONE!')
