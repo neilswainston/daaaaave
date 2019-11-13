@@ -12,9 +12,6 @@ results() will reproduce Tables 1 and 2 of that paper, which compares
 Daaaaave with alternatives FBA, Gimme and Shlomi, and with experimental
 measurements.
 
-Flagging original_method to True will use a warts-and-all implementation
-to ensure identical results to the original Matlab algorithm.
-
 29-May-15:
 
 Implementation of all-improved SuperDaaaaave, translated from the Matlab
@@ -120,7 +117,7 @@ def test_ComparisonDaaaaave():
             print('%s\t%.3g\t%.3g' % (
                 exp_rxn_names[i], exp_flux[i], mod_ComparisonDaaaaave[i]))
         print('%s\t%.3g\t%.3g\n' % (
-            'R2', 1, r_squared(mod_ComparisonDaaaaave[1:], exp_flux[1:])))
+            'R2', 1, r2_score(exp_flux[1:], mod_ComparisonDaaaaave[1:])))
 
     # rxn	exp	C'Dave
     # D-glucose exchange	16.5	16.5
@@ -1318,13 +1315,13 @@ def results():
 
 def print_results(
         model_file, genes_file, fluxes_file,
-        gene_to_scale, flux_to_scale, original_method=False):
+        gene_to_scale, flux_to_scale):
     """Format output as per Daaaaave et al."""
 
     (rxn_names, exp_flux, mod_SuperDaaaaave, mod_daaaaave,
      mod_fba, mod_fba_best, mod_gimme) = analysis(
          model_file, genes_file, fluxes_file,
-         gene_to_scale, flux_to_scale, original_method)
+         gene_to_scale, flux_to_scale)
     print('%s\t%s\t%s\t%s\t%s\t%s\t%s' % (
         "rxn", "exp", "S'Dave", "Dave",
         "FBA", "fFBA", "Gimme"))
@@ -1343,8 +1340,7 @@ def print_results(
 
 
 def OriginalDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, gene_to_scale,
-                     exp_rxn_names, exp_flux, flux_to_scale,
-                     original_method=False):
+                     exp_rxn_names, exp_flux, flux_to_scale):
 
     # gene data -> reaction data
     rxn_exp, rxn_exp_sd = genes_to_rxns(
@@ -1355,7 +1351,7 @@ def OriginalDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, gene_to_scale,
     )
 
     # Gene expression constraint FBA
-    flux = data_to_flux(sbml, rxn_exp, rxn_exp_sd, original_method)
+    flux = data_to_flux(sbml, rxn_exp, rxn_exp_sd)
 
     # rescale
     flux_scale = exp_flux[exp_rxn_names.index(flux_to_scale)]
@@ -1365,8 +1361,7 @@ def OriginalDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, gene_to_scale,
 
 
 def GimmeGimmeGimme(sbml, gene_names, gene_exp, gene_exp_sd, gene_to_scale,
-                    exp_rxn_names, exp_flux, flux_to_scale,
-                    original_method=False):
+                    exp_rxn_names, exp_flux, flux_to_scale):
 
     cutoff = 0.25  # set threshold at lower quartile
     req_fun = 0.9  # force 90% growth
@@ -1381,7 +1376,7 @@ def GimmeGimmeGimme(sbml, gene_names, gene_exp, gene_exp_sd, gene_to_scale,
     )
 
     # gimme
-    flux = gimme(sbml, rxn_exp, cutoff, req_fun, original_method)
+    flux = gimme(sbml, rxn_exp, cutoff, req_fun)
 
     # rescale
     flux_scale = exp_flux[exp_rxn_names.index(flux_to_scale)]
@@ -1390,10 +1385,9 @@ def GimmeGimmeGimme(sbml, gene_names, gene_exp, gene_exp_sd, gene_to_scale,
     return flux
 
 
-def OriginalFBA(sbml, exp_rxn_names, exp_flux, flux_to_scale,
-                original_method=False):
+def OriginalFBA(sbml, exp_rxn_names, exp_flux, flux_to_scale):
 
-    flux, _ = optimize_cobra_model(sbml, original_method)
+    flux, _ = optimize_cobra_model(sbml)
 
     # rescale
     flux_scale = exp_flux[exp_rxn_names.index(flux_to_scale)]
@@ -1402,14 +1396,13 @@ def OriginalFBA(sbml, exp_rxn_names, exp_flux, flux_to_scale,
     return flux
 
 
-def FittedFBA(sbml, gene_to_scale, exp_rxn_names, exp_flux, flux_to_scale,
-              original_method=False):
+def FittedFBA(sbml, gene_to_scale, exp_rxn_names, exp_flux, flux_to_scale):
 
     data = create_data_array(
         sbml, exp_flux[:], exp_rxn_names[:], gene_to_scale)
 
     flux_scale = exp_flux[exp_rxn_names.index(flux_to_scale)]
-    flux = fba_fitted(sbml, data / flux_scale, original_method)
+    flux = fba_fitted(sbml, data / flux_scale)
 
     # rescale
     flux = [value * flux_scale for value in flux]
@@ -1439,13 +1432,9 @@ def rescale_SBML(sbml, exp_rxn_names, exp_flux, flux_to_scale):
             LB.setValue(flux_scale)
             UB.setValue(flux_scale)
 
-#    # test
-#    print optimize_cobra_model(sbml, original_method=True)[1]
-
 
 def analysis(
-        model_file, genes_file, fluxes_file,
-        gene_to_scale, flux_to_scale, original_method=False):
+        model_file, genes_file, fluxes_file, gene_to_scale, flux_to_scale):
     """Run all analyses on input files."""
 
     # SuperDaaaaave!
@@ -1465,22 +1454,20 @@ def analysis(
     # OriginalDaaaaave
     v_gene_exp = OriginalDaaaaave(
         sbml, gene_names, gene_exp, gene_exp_sd, gene_to_scale,
-        exp_rxn_names, exp_flux, flux_to_scale, original_method
-    )
+        exp_rxn_names, exp_flux, flux_to_scale)
 
     # GimmeGimmeGimme
     v_gimme = GimmeGimmeGimme(
         sbml, gene_names, gene_exp, gene_exp_sd, gene_to_scale,
-        exp_rxn_names, exp_flux, flux_to_scale, original_method
-    )
+        exp_rxn_names, exp_flux, flux_to_scale)
 
     # OriginalFBA
     v_fba = OriginalFBA(sbml, exp_rxn_names, exp_flux,
-                        flux_to_scale, original_method)
+                        flux_to_scale)
 
     # find best fit from standard FBA solution
     v_fba_best = FittedFBA(sbml, gene_to_scale, exp_rxn_names,
-                           exp_flux, flux_to_scale, original_method)
+                           exp_flux, flux_to_scale)
 
     # compare
     mod_SuperDaaaaave, mod_daaaaave, mod_fba, mod_gimme, mod_fba_best = \
@@ -1742,15 +1729,12 @@ def a_or_b(str1, str2):
     return str_ng + '~' + str_ng_sd
 
 
-def data_to_flux(sbml, rxn_exp, rxn_exp_sd, original_method=False):
+def data_to_flux(sbml, rxn_exp, rxn_exp_sd):
     """Daaaaave: predict flux by maximising correlation with data."""
 
     model = sbml.getModel()
     nr_old = 0
-    if original_method:
-        bound = 1000
-    else:
-        bound = np.inf
+    bound = np.inf
     cobra = convert_sbml_to_cobra(sbml, bound)
     v_sol = np.zeros(model.getNumReactions())
 
@@ -1833,7 +1817,7 @@ def data_to_flux(sbml, rxn_exp, rxn_exp_sd, original_method=False):
                         cobra['lb'][i] = max(cobra['lb'][i], 0.)
                         cobra['rev'][i] = False
                     else:
-                        if U[i] <= 0 and not original_method:
+                        if U[i] <= 0 and not False:
                             f_opt, conv = 0, True
                         else:
                             f[i] = 1
@@ -1845,8 +1829,8 @@ def data_to_flux(sbml, rxn_exp, rxn_exp_sd, original_method=False):
                                 f_opt = lp.ObjVal
                             else:
                                 f_opt = np.nan
-                        cond1 = (original_method) and (abs(f_opt) <= 0)
-                        cond2 = (not original_method) and (f_opt <= 0)
+                        cond1 = (False) and (abs(f_opt) <= 0)
+                        cond2 = (not False) and (f_opt <= 0)
                         if conv and (cond1 or cond2):  # irreversibly backward
                             cobra['ub'][i] = min(cobra['ub'][i], 0.)
                             cobra['rev'][i] = False
@@ -2082,13 +2066,10 @@ def convert_sbml_to_cobra(sbml, bound=np.inf):
     return cobra
 
 
-def optimize_cobra_model(sbml, original_method=False):
+def optimize_cobra_model(sbml):
     """Replicate Cobra command optimizeCbModel(model,[],'one')."""
 
-    if original_method:
-        bound = 1000
-    else:
-        bound = np.inf
+    bound = np.inf
     cobra = convert_sbml_to_cobra(sbml, bound)
 
     N, L, U = cobra['S'], list(cobra['lb']), list(cobra['ub'])
@@ -2100,12 +2081,12 @@ def optimize_cobra_model(sbml, original_method=False):
 
 def gimme(
         sbml, gene_exp,
-        cutoff_threshold=0.25, req_fun=0.9, original_method=False):
+        cutoff_threshold=0.25, req_fun=0.9):
     """Gimme method."""
     model = sbml.getModel()
 
     # set "required metabolic functionalities"
-    f_opt = optimize_cobra_model(sbml, original_method)[1]
+    f_opt = optimize_cobra_model(sbml)[1]
     c = [
         reaction.getKineticLaw()
         .getParameter('OBJECTIVE_COEFFICIENT').getValue()
@@ -2116,12 +2097,8 @@ def gimme(
         req_fun * f_opt)
 
     cutoff_percent = 100. * cutoff_threshold
-    if original_method:
-        cutoff = prctile(gene_exp, cutoff_percent)
-        bound = 1000
-    else:
-        cutoff = np.percentile(gene_exp, cutoff_percent)
-        bound = np.inf
+    cutoff = np.percentile(gene_exp, cutoff_percent)
+    bound = np.inf
 
     cobra = convert_sbml_to_cobra(sbml, bound=bound)
     S, L, U = cobra['S'], list(cobra['lb']), list(cobra['ub'])
@@ -2151,26 +2128,15 @@ def gimme(
     return v_sol
 
 
-def prctile(x, p):
-    """Implementation of MatLab percentile function."""
-    x = np.array(x)
-    x = x[~np.isnan(x)]
-    x.sort()
-    nr = len(x)
-    q = 100 * (np.array(range(nr)) + 0.5) / nr
-    v = np.interp(p, q, x)
-    return v
-
-
 def shlomi(sbml):
     """[Shlomi method is not implemented.]"""
     model = sbml.getModel()
     return np.zeros(model.getNumReactions())
 
 
-def fba_fitted(sbml, data, original_method=False):
+def fba_fitted(sbml, data):
     """FBA solution that best fits data."""
-    f_opt = optimize_cobra_model(sbml, original_method)[1]
+    f_opt = optimize_cobra_model(sbml)[1]
     model = sbml.getModel()
     c = [
         reaction.getKineticLaw()
@@ -2179,10 +2145,7 @@ def fba_fitted(sbml, data, original_method=False):
     ]
     biomass = model.getReaction(c.index(1))
     biomass.getKineticLaw().getParameter('LOWER_BOUND').setValue(f_opt)
-    if original_method:
-        bound = 1000
-    else:
-        bound = np.inf
+    bound = np.inf
     cobra = convert_sbml_to_cobra(sbml, bound)
     N, L, U = cobra['S'].copy(), list(cobra['lb']), list(cobra['ub'])
     f, b = list(cobra['c']), list(cobra['b'])
