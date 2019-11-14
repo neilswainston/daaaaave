@@ -12,8 +12,6 @@ import re
 import libsbml
 from scipy.sparse import lil_matrix
 
-import numpy as np
-
 
 def read_sbml(filename):
     '''Read an SBML file from specified path.'''
@@ -55,11 +53,11 @@ def convert_sbml_to_cobra(sbml, bound=1000):
         rev.append(rxn_rev)
 
     return {'S': S,
-            'lb': np.array(lb),
-            'ub': np.array(ub),
-            'c': np.array(c),
-            'b': np.array(b),
-            'rev': np.array(rev)}
+            'lb': lb,
+            'ub': ub,
+            'c': c,
+            'b': b,
+            'rev': rev}
 
 
 def get_gene_associations(sbml):

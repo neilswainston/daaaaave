@@ -1382,7 +1382,7 @@ def GimmeGimmeGimme(sbml, gene_names, gene_exp, gene_exp_sd, gene_to_scale,
 
 def OriginalFBA(sbml, exp_rxn_names, exp_flux, flux_to_scale):
 
-    flux, _ = optimize_cobra_model(sbml)
+    flux, _, _ = optimize_cobra_model(sbml)
 
     # rescale
     flux_scale = exp_flux[exp_rxn_names.index(flux_to_scale)]
@@ -1496,19 +1496,20 @@ def rescale_model(sbml, rxn_exp, rxn_exp_sd, gene_to_scale):
 
 
 def create_data_array(sbml, exp_flux, exp_rxn_names, gene_to_scale):
-
+    '''Create data array.'''
     exp_rxn_names.append(gene_to_scale)
     exp_flux.append(1.)
     model = sbml.getModel()
-    mod_rxn_names = [
-        reaction.getName()
-        for reaction in model.getListOfReactions()
-    ]
+    mod_rxn_names = [reaction.getName()
+                     for reaction in model.getListOfReactions()]
+
     data = np.empty(model.getNumReactions())
     data[:] = np.nan
-    for i in range(len(exp_rxn_names)):
-        j = mod_rxn_names.index(exp_rxn_names[i])
+
+    for i, exp_rxn_name in enumerate(exp_rxn_names):
+        j = mod_rxn_names.index(exp_rxn_name)
         data[j] = exp_flux[i]
+
     return data
 
 
@@ -1842,11 +1843,8 @@ def optimize_cobra_model(sbml):
     """Replicate Cobra command optimizeCbModel(model,[],'one')."""
     cobra = convert_sbml_to_cobra(sbml)
 
-    N, L, U = cobra['S'], list(cobra['lb']), list(cobra['ub'])
-    f, b = list(cobra['c']), list(cobra['b'])
-    v_sol, f_opt, _ = easy_lp(f, N, b, L, U, one=True)
-
-    return v_sol, f_opt
+    return easy_lp(cobra['c'], cobra['S'], cobra['b'],
+                   cobra['lb'], cobra['ub'], one=True)
 
 
 def gimme(
