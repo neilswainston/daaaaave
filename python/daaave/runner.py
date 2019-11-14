@@ -44,6 +44,7 @@ from sklearn.metrics import r2_score
 
 from daaave.data import genes_to_rxns, load_flux_data, load_gene_data
 from daaave.model import convert_sbml_to_cobra, read_sbml
+from daaave.relative import gimme
 import numpy as np
 import scipy.sparse as sparse
 
@@ -147,31 +148,6 @@ def OriginalDaaaaave(sbml, gene_names, gene_exp, gene_exp_sd, gene_to_scale,
     return flux
 
 
-def GimmeGimmeGimme(sbml, gene_names, gene_exp, gene_exp_sd, gene_to_scale,
-                    exp_rxn_names, exp_flux, flux_to_scale):
-
-    cutoff = 0.25  # set threshold at lower quartile
-    req_fun = 0.9  # force 90% growth
-
-    # gene data -> reaction data
-    rxn_exp, rxn_exp_sd = genes_to_rxns(
-        sbml, gene_names, gene_exp, gene_exp_sd)
-
-    # rescale model so rxn_exp and flux = 1 for reaction gene_to_scale
-    sbml, rxn_exp, rxn_exp_sd = rescale_model(
-        sbml, rxn_exp, rxn_exp_sd, gene_to_scale
-    )
-
-    # gimme
-    flux = gimme(sbml, rxn_exp, cutoff, req_fun)
-
-    # rescale
-    flux_scale = exp_flux[exp_rxn_names.index(flux_to_scale)]
-    flux = [value * flux_scale for value in flux]
-
-    return flux
-
-
 def OriginalFBA(sbml, exp_rxn_names, exp_flux, flux_to_scale):
 
     flux, _, _ = optimize_cobra_model(sbml)
@@ -224,7 +200,7 @@ def analysis(
     )
 
     # GimmeGimmeGimme
-    v_gimme = GimmeGimmeGimme(
+    v_gimme = gimme.gimme(
         sbml, gene_names, gene_exp, gene_exp_sd, gene_to_scale,
         exp_rxn_names, exp_flux, flux_to_scale)
 
@@ -614,65 +590,6 @@ def optimize_cobra_model(sbml):
 
     return easy_lp(cobra['c'], cobra['S'], cobra['b'],
                    cobra['lb'], cobra['ub'], one=True)
-
-
-def gimme(
-        sbml, gene_exp,
-        cutoff_threshold=0.25, req_fun=0.9):
-    """Gimme method."""
-    model = sbml.getModel()
-
-    # set "required metabolic functionalities"
-    f_opt = optimize_cobra_model(sbml)[1]
-    c = [
-        reaction.getKineticLaw()
-        .getParameter('OBJECTIVE_COEFFICIENT').getValue()
-        for reaction in model.getListOfReactions()
-    ]
-    biomass = model.getReaction(c.index(1))
-    biomass.getKineticLaw().getParameter('LOWER_BOUND').setValue(
-        req_fun * f_opt)
-
-    cutoff_percent = 100. * cutoff_threshold
-    cutoff = prctile(gene_exp, cutoff_percent)
-
-    cobra = convert_sbml_to_cobra(sbml)
-    S, L, U = cobra['S'], list(cobra['lb']), list(cobra['ub'])
-    f, b = list(cobra['c']), list(cobra['b'])
-    f = [0.] * len(f)
-    for i in range(len(gene_exp)):
-        if gene_exp[i] < cutoff:
-            c = cutoff - gene_exp[i]
-            n1, n2 = S.shape
-            col = sparse.lil_matrix((n1, 1))
-            S = sparse.hstack([S, col, col])
-            row = sparse.lil_matrix((1, n2 + 2))
-            row[0, i] = 1.
-            row[0, n2] = -1.
-            row[0, n2 + 1] = 1.
-            S = sparse.vstack([S, row])
-            L.append(0.)
-            L.append(0.)
-            U.append(np.inf)
-            U.append(np.inf)
-            f.append(-c)
-            f.append(-c)
-            b.append(0.)
-    solution = easy_lp(f, S, b, L, U, one=True)[0]
-    v_sol = solution[:model.getNumReactions()]
-
-    return v_sol
-
-
-def prctile(x, p):
-    """Implementation of MatLab percentile function."""
-    x = np.array(x)
-    x = x[~np.isnan(x)]
-    x.sort()
-    nr = len(x)
-    q = 100 * (np.array(range(nr)) + 0.5) / nr
-    v = np.interp(p, q, x)
-    return v
 
 
 def fba_fitted(sbml, data):
