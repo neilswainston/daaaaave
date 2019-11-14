@@ -74,6 +74,24 @@ def get_gene_associations(sbml):
     return gene_assoc
 
 
+def rescale_model(sbml, rxn_exp, rxn_exp_sd, gene_to_scale):
+    '''Rescale model.'''
+    model = sbml.getModel()
+    rxn_names = [
+        reaction.getName()
+        for reaction in model.getListOfReactions()
+    ]
+    uptake = rxn_names.index(gene_to_scale)
+    rxn_exp_sd = rxn_exp_sd / rxn_exp[uptake]
+    rxn_exp = rxn_exp / rxn_exp[uptake]
+    reaction = model.getReaction(uptake)
+    kinetic_law = reaction.getKineticLaw()
+    kinetic_law.getParameter('LOWER_BOUND').setValue(1)
+    kinetic_law.getParameter('UPPER_BOUND').setValue(1)
+
+    return sbml, rxn_exp, rxn_exp_sd
+
+
 def _update_s_matrix(model, reaction, S, j, spec_ids):
     '''Update S-matrix.'''
     for reactant in reaction.getListOfReactants():

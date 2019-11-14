@@ -11,8 +11,7 @@ All rights reserved.
 # pylint: disable=wrong-import-order
 
 from daaave.data import genes_to_rxns
-from daaave.model import convert_sbml_to_cobra
-from daaave.runner import rescale_model
+from daaave.model import convert_sbml_to_cobra, rescale_model
 from daaave.solver import easy_lp, optimize_cobra_model
 import numpy as np
 import scipy.sparse as sparse
