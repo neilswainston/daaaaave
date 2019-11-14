@@ -21,7 +21,7 @@ from sklearn.metrics import r2_score
 from daaave.data import load_flux_data, load_gene_data
 from daaave.model import convert_sbml_to_cobra, get_gene_associations, \
     read_sbml
-from daaave.runner import easy_milp
+from daaave.solver import easy_milp
 import numpy as np
 import scipy.sparse as sparse
 

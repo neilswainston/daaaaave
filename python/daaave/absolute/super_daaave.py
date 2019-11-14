@@ -18,7 +18,7 @@ from sympy.logic import boolalg
 from daaave.data import load_flux_data, load_gene_data
 from daaave.model import convert_sbml_to_cobra, get_gene_associations, \
     read_sbml
-from daaave.runner import easy_lp, easy_milp, easy_milp_sos
+from daaave.solver import easy_lp, easy_milp, easy_milp_sos
 import numpy as np
 import scipy.sparse as sparse
 
