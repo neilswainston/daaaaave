@@ -6,7 +6,6 @@ All rights reserved.
 @author: neilswainston
 '''
 # pylint: disable=invalid-name
-# pylint: disable=too-many-locals
 import re
 
 import libsbml
@@ -36,19 +35,19 @@ def convert_sbml_to_cobra(sbml, bound=1000):
         _update_s_matrix(model, reaction, S, j, spec_ids)
 
         kinetic_law = reaction.getKineticLaw()
-        rxn_lb = kinetic_law.getParameter('LOWER_BOUND').getValue()
-        rxn_ub = kinetic_law.getParameter('UPPER_BOUND').getValue()
+        rxn_lb = max(kinetic_law.getParameter('LOWER_BOUND').getValue(),
+                     -bound)
+
         rxn_rev = reaction.getReversible()
 
         if rxn_lb < -bound:
             rxn_lb = -bound
-        if rxn_ub > bound:
-            rxn_ub = bound
         if rxn_lb < 0:
             rxn_rev = True
 
         lb.append(rxn_lb)
-        ub.append(rxn_ub)
+        ub.append(min(kinetic_law.getParameter('UPPER_BOUND').getValue(),
+                      bound))
         c.append(kinetic_law.getParameter('OBJECTIVE_COEFFICIENT').getValue())
         rev.append(rxn_rev)
 
