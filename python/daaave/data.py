@@ -11,7 +11,7 @@ All rights reserved.
 import csv
 import re
 
-from daaave.model import get_gene_associations
+from daaave.model_utils import get_gene_associations
 from daaave.utils import set_diff
 import numpy as np
 
@@ -70,7 +70,7 @@ def genes_to_rxns(sbml, gene_names, gene_exp, gene_exp_sd):
         gene_list = set_diff(gene_list, ['and', 'or', ''])
 
         for gene in gene_list:
-            # Add check for missing data:
+            # Add check for missing data:
             if gene in gene_names:
                 j = gene_names.index(gene)
                 str_ng = repr(gene_exp[j])
