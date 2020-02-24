@@ -13,7 +13,7 @@ All rights reserved.
 # pylint: disable=wrong-import-order
 import gurobipy
 from scipy import sparse
-from daaave.model import convert_sbml_to_cobra
+from daaave.model_utils import convert_sbml_to_cobra
 import numpy as np
 
 

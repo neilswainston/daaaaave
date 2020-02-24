@@ -33,7 +33,7 @@ from sklearn.metrics import r2_score
 
 from daaave.absolute import fba, gimme, orig_daaave
 from daaave.data import load_flux_data, load_gene_data
-from daaave.model import read_sbml
+from daaave.model_utils import read_sbml
 import numpy as np
 
 

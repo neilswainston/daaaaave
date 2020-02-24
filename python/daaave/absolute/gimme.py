@@ -11,7 +11,8 @@ All rights reserved.
 # pylint: disable=wrong-import-order
 
 from daaave.data import genes_to_rxns
-from daaave.model import convert_sbml_to_cobra, rescale_model
+from daaave.model_utils import convert_sbml_to_cobra, rescale_model, \
+    get_parameter, set_parameter
 from daaave.solver import easy_lp, optimize_cobra_model
 import numpy as np
 import scipy.sparse as sparse
@@ -44,16 +45,12 @@ def _gimme(sbml, gene_exps, cutoff_threshold=0.25, req_fun=0.9):
     # set 'required metabolic functionalities'
     f_opt = optimize_cobra_model(sbml)[1]
 
-    c = [
-        reaction.getKineticLaw()
-        .getParameter('OBJECTIVE_COEFFICIENT').getValue()
-        for reaction in model.getListOfReactions()
-    ]
+    c = [get_parameter(reaction, 'OBJECTIVE_COEFFICIENT')
+         for reaction in model.getListOfReactions()]
 
     biomass = model.getReaction(c.index(1))
 
-    biomass.getKineticLaw().getParameter('LOWER_BOUND').setValue(
-        req_fun * f_opt)
+    set_parameter(biomass, 'LOWER_BOUND', req_fun * f_opt)
 
     cutoff_percent = 100. * cutoff_threshold
     cutoff = _prctile(gene_exps, cutoff_percent)

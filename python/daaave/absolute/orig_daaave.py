@@ -14,7 +14,7 @@ All rights reserved.
 # pylint: disable=wrong-import-order
 import gurobipy
 from daaave.data import genes_to_rxns
-from daaave.model import convert_sbml_to_cobra, rescale_model
+from daaave.model_utils import convert_sbml_to_cobra, rescale_model
 from daaave.solver import easy_lp
 import numpy as np
 import scipy.sparse as sparse
@@ -51,6 +51,7 @@ def _data_to_flux(sbml, rxn_exp, rxn_exp_sd, original_method=False):
     v_sol = np.zeros(model.getNumReactions())
 
     while list(cobra['rev']).count(False) > nr_old:
+        print('Updating reversibility...')
         nr_old = list(cobra['rev']).count(False)
 
         # 1. fit to data
@@ -112,6 +113,7 @@ def _data_to_flux(sbml, rxn_exp, rxn_exp_sd, original_method=False):
             lp.ModelSense = -1
 
             for i in range(model.getNumReactions()):
+                print('Checking reaction %i' % i)
                 if cobra['rev'][i]:
                     f = [0.] * len(L)
                     f[i] = -1

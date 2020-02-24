@@ -34,7 +34,7 @@ def convert_sbml_to_cobra(sbml, bound=1000):
     for j, reaction in enumerate(model.getListOfReactions()):
         _update_s_matrix(model, reaction, S, j, spec_ids)
 
-        rxn_lb = max(_get_parameter(reaction, 'LOWER_BOUND'), -bound)
+        rxn_lb = max(get_parameter(reaction, 'LOWER_BOUND'), -bound)
 
         rxn_rev = reaction.getReversible()
 
@@ -44,8 +44,8 @@ def convert_sbml_to_cobra(sbml, bound=1000):
             rxn_rev = True
 
         lb.append(rxn_lb)
-        ub.append(min(_get_parameter(reaction, 'UPPER_BOUND'), bound))
-        c.append(_get_parameter(reaction, 'OBJECTIVE_COEFFICIENT'))
+        ub.append(min(get_parameter(reaction, 'UPPER_BOUND'), bound))
+        c.append(get_parameter(reaction, 'OBJECTIVE_COEFFICIENT'))
         rev.append(rxn_rev)
 
     return {'S': S,
@@ -94,13 +94,13 @@ def rescale_model(sbml, rxn_exp, rxn_exp_sd, gene_to_scale):
     rxn_exp_sd = rxn_exp_sd / rxn_exp[uptake]
     rxn_exp = rxn_exp / rxn_exp[uptake]
     reaction = model.getReaction(uptake)
-    _set_parameter(reaction, 'LOWER_BOUND', 1)
-    _set_parameter(reaction, 'UPPER_BOUND', 1)
+    set_parameter(reaction, 'LOWER_BOUND', 1)
+    set_parameter(reaction, 'UPPER_BOUND', 1)
 
     return sbml, rxn_exp, rxn_exp_sd
 
 
-def _set_parameter(reaction, param_id, value):
+def set_parameter(reaction, param_id, value):
     '''Set parameter.'''
     kinetic_law = reaction.getKineticLaw()
 
@@ -116,7 +116,7 @@ def _set_parameter(reaction, param_id, value):
     parameter.setValue(value)
 
 
-def _get_parameter(reaction, param_id):
+def get_parameter(reaction, param_id):
     '''Get parameter.'''
     kinetic_law = reaction.getKineticLaw()
 

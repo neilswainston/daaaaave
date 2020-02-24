@@ -8,7 +8,7 @@ All rights reserved.
 # pylint: disable=invalid-name
 # pylint: disable=too-many-locals
 # pylint: disable=wrong-import-order
-from daaave.model import convert_sbml_to_cobra
+from daaave.model_utils import convert_sbml_to_cobra
 from daaave.solver import easy_lp, optimize_cobra_model
 import numpy as np
 import scipy.sparse as sparse
