@@ -70,9 +70,14 @@ def genes_to_rxns(sbml, gene_names, gene_exp, gene_exp_sd):
         gene_list = set_diff(gene_list, ['and', 'or', ''])
 
         for gene in gene_list:
-            j = gene_names.index(gene)
-            str_ng = repr(gene_exp[j])
-            str_ng_sd = repr(gene_exp_sd[j])
+            # Add check for missing data:
+            if gene in gene_names:
+                j = gene_names.index(gene)
+                str_ng = repr(gene_exp[j])
+                str_ng_sd = repr(gene_exp_sd[j])
+            else:
+                str_ng = '0.0'
+                str_ng_sd = '0.0'
 
             gene_assn = re.sub(
                 r'\b' + gene + r'\b', str_ng + '~' + str_ng_sd, gene_assn)

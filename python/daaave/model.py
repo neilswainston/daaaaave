@@ -34,9 +34,7 @@ def convert_sbml_to_cobra(sbml, bound=1000):
     for j, reaction in enumerate(model.getListOfReactions()):
         _update_s_matrix(model, reaction, S, j, spec_ids)
 
-        kinetic_law = reaction.getKineticLaw()
-        rxn_lb = max(kinetic_law.getParameter('LOWER_BOUND').getValue(),
-                     -bound)
+        rxn_lb = max(_get_parameter(reaction, 'LOWER_BOUND'), -bound)
 
         rxn_rev = reaction.getReversible()
 
@@ -46,9 +44,8 @@ def convert_sbml_to_cobra(sbml, bound=1000):
             rxn_rev = True
 
         lb.append(rxn_lb)
-        ub.append(min(kinetic_law.getParameter('UPPER_BOUND').getValue(),
-                      bound))
-        c.append(kinetic_law.getParameter('OBJECTIVE_COEFFICIENT').getValue())
+        ub.append(min(_get_parameter(reaction, 'UPPER_BOUND'), bound))
+        c.append(_get_parameter(reaction, 'OBJECTIVE_COEFFICIENT'))
         rev.append(rxn_rev)
 
     return {'S': S,
@@ -61,7 +58,7 @@ def convert_sbml_to_cobra(sbml, bound=1000):
 
 def get_gene_associations(sbml):
     '''Get gene associations.'''
-    gene_assoc = []
+    gene_assocs = []
 
     model = sbml.getModel()
 
@@ -69,9 +66,21 @@ def get_gene_associations(sbml):
         match = re.search(r'<p>GENE_ASSOCIATION:([^<]*)</p>',
                           reaction.getNotesString())
 
-        gene_assoc.append(match.group(1))
+        if match:
+            gene_assoc = match.group(1)
+        else:
+            # Support SBML v3:
+            fbc = reaction.getPlugin('fbc')
+            gpa = fbc.getGeneProductAssociation()
 
-    return gene_assoc
+            if gpa:
+                gene_assoc = _process_assoc(gpa.getAssociation())
+            else:
+                gene_assoc = ''
+
+        gene_assocs.append(gene_assoc)
+
+    return gene_assocs
 
 
 def rescale_model(sbml, rxn_exp, rxn_exp_sd, gene_to_scale):
@@ -85,11 +94,69 @@ def rescale_model(sbml, rxn_exp, rxn_exp_sd, gene_to_scale):
     rxn_exp_sd = rxn_exp_sd / rxn_exp[uptake]
     rxn_exp = rxn_exp / rxn_exp[uptake]
     reaction = model.getReaction(uptake)
-    kinetic_law = reaction.getKineticLaw()
-    kinetic_law.getParameter('LOWER_BOUND').setValue(1)
-    kinetic_law.getParameter('UPPER_BOUND').setValue(1)
+    _set_parameter(reaction, 'LOWER_BOUND', 1)
+    _set_parameter(reaction, 'UPPER_BOUND', 1)
 
     return sbml, rxn_exp, rxn_exp_sd
+
+
+def _set_parameter(reaction, param_id, value):
+    '''Set parameter.'''
+    kinetic_law = reaction.getKineticLaw()
+
+    if not kinetic_law:
+        kinetic_law = reaction.createKineticLaw()
+
+    parameter = kinetic_law.getParameter(param_id)
+
+    if not parameter:
+        parameter = kinetic_law.createParameter()
+        parameter.setId(param_id)
+
+    parameter.setValue(value)
+
+
+def _get_parameter(reaction, param_id):
+    '''Get parameter.'''
+    kinetic_law = reaction.getKineticLaw()
+
+    if not kinetic_law or not kinetic_law.getParameter(param_id):
+        if param_id == 'LOWER_BOUND':
+            return float('-inf')
+
+        if param_id == 'UPPER_BOUND':
+            return float('inf')
+
+        if param_id == 'OBJECTIVE_COEFFICIENT':
+            return 0
+
+    return kinetic_law.getParameter(param_id).getValue()
+
+
+def _process_assoc(ass):
+    ''' Recursively convert gpr association to a gpr string.
+    Defined as inline functions to not pass the replacement dict around.
+    '''
+    if ass.isFbcOr():
+        return ' '.join(
+            ['(', ' or '.join(_process_assoc(c)
+                              for c in ass.getListOfAssociations()), ')']
+        )
+
+    if ass.isFbcAnd():
+        return ' '.join(
+            ['(', ' and '.join(_process_assoc(c)
+                               for c in ass.getListOfAssociations()), ')'])
+
+    if ass.isGeneProductRef():
+        gid = ass.getGeneProduct()
+
+        if gid.startswith('G_'):
+            return gid[2:]
+
+        return gid
+
+    return None
 
 
 def _update_s_matrix(model, reaction, S, j, spec_ids):
